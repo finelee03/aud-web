@@ -35,7 +35,7 @@
   const EMAIL_RX       = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const AUTH_FLAG_KEY  = "auth:flag";     // tab-scoped auth flag
   const NAV_MARK_KEY   = "auth:navigate"; // internal navigation mark
-  const MINE_PATH = "./mine.html";    // default landing
+  const MINE_PATH = (window.pageHref ? pageHref("mine.html") : "./mine.html");    // default landing
 
   const FORCE_LOGIN =
     new URL(location.href).searchParams.get("force") === "1" ||
