@@ -100,6 +100,7 @@
         });
       } catch {}
     };
+    
     window.sockUnsubscribeAll = function () {
       if (!subscribed.size) return;
       const arr = Array.from(subscribed);
