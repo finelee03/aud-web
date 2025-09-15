@@ -22,8 +22,14 @@
   // ★ 추가: 툴바 새로고침/내비 보호용 짧은 유예
   const GRACE_NAV_BOOT_MS = 200;
 
-  const setAuthedFlag = () => sessionStorage.setItem(AUTH_FLAG_KEY, "1");
-  const clearAuthedFlag = () => sessionStorage.removeItem(AUTH_FLAG_KEY);
+  const setAuthedFlag = () => {
+    try { sessionStorage.setItem(AUTH_FLAG_KEY, "1"); } catch {}
+    try { localStorage.setItem(AUTH_FLAG_KEY,  "1"); }  catch {}
+  };
+  const clearAuthedFlag = () => {
+    try { sessionStorage.removeItem(AUTH_FLAG_KEY); } catch {}
+    try { localStorage.removeItem(AUTH_FLAG_KEY);  }  catch {}
+  };
 
   const now = () => Date.now();
 
@@ -288,7 +294,7 @@
             [JSON.stringify({ reason: "tab-close", t: Date.now(), via: trigger || "scheduled" })],
             { type: "application/json" }
           );
-          const ok = navigator.sendBeacon?.("/auth/logout-beacon", blob);
+          const ok = navigator.sendBeacon?.(toAPI("/auth/logout-beacon"), blob);
           if (!ok) throw new Error("beacon-failed");
         } catch {
           try {

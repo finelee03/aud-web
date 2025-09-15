@@ -43,7 +43,7 @@
         [JSON.stringify({ t: Date.now(), path: location.pathname })],
         { type: "application/json" }
       );
-      if (navigator.sendBeacon && navigator.sendBeacon(toAPI("/auth/nav"), blob)) return;if (navigator.sendBeacon && navigator.sendBeacon("/auth/nav", blob)) return;
+      if (navigator.sendBeacon && navigator.sendBeacon(toAPI("/auth/nav"), blob)) return;
     } catch {}
 
     try {
@@ -78,6 +78,17 @@
     } catch {}
   })();
 
+  function computeLogoDest() {
+    const mine  = absURL("mine.html");
+    const login = absURL("login.html");
+    // 빠른 체감 반응: window.auth.isAuthed() 우선, 초기 부팅 동안엔 세션 플래그 폴백
+    const authed = !!(window.auth?.isAuthed?.() || sessionStorage.getItem(AUTH_FLAG_KEY) === "1");
+    if (authed) return mine;
+    const u = new URL(login);
+    u.searchParams.set("next", mine);
+    return u.toString();
+  }
+
   function attachClickGuard(a) {
     if (!a || a.dataset.logoGuard === "1") return;
     a.dataset.logoGuard = "1";
@@ -108,16 +119,16 @@
       navPingSilent();
 
       // 항상 같은 탭에서 mine으로
-      location.assign(absURL("mine.html"));
+      location.assign(computeLogoDest());
     }, { capture: true });
   }
 
   function updateLogoHref() {
     const links = document.querySelectorAll(SELECTOR);
     if (!links.length) return;
-    const mineURL = absURL("mine.html");
+    const dest = computeLogoDest();
     links.forEach((a) => {
-      if (a.getAttribute("href") !== mineURL) a.setAttribute("href", mineURL);
+      if (a.getAttribute("href") !== dest) a.setAttribute("href", dest);
       attachClickGuard(a);
     });
   }
@@ -137,4 +148,11 @@
     : boot();
 
   try { window.dispatchEvent(new Event("logo-guard:ready")); } catch {}
+
+  window.addEventListener("auth:state",  updateLogoHref, { passive: true });
+  window.addEventListener("auth:logout", updateLogoHref, { passive: true });
+  window.addEventListener("storage", (ev) => {
+    if (ev.key === AUTH_FLAG_KEY || ev.key === "auth:ping") updateLogoHref();
+  }, { passive: true });
+  
 })();
