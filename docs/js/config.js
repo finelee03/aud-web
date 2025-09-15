@@ -10,12 +10,15 @@
   window.fetch = function(input, init) {
     try {
       const u = new URL(input, location.href);
-      // 같은 오리진으로 향하는 요청만 API로 프록시
-      if (u.origin === location.origin) {
-        const apiURL = new URL(u.pathname + u.search + u.hash, API);
-        return _fetch(apiURL.toString(), init);
+      if (u.origin === location.origin && /^\/(?:auth|api)\//.test(u.pathname)) {
+        const API = window.PROD_BACKEND || window.API_BASE;
+        if (API) {
+          const apiURL = new URL(u.pathname + u.search + u.hash, API);
+          return _fetch(apiURL.toString(), init);
+        }
       }
     } catch {}
     return _fetch(input, init);
   };
+
 })();

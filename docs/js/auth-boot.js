@@ -34,7 +34,19 @@
   const now = () => Date.now();
 
   // GH Pages(정적 호스트)에서 /auth, /api 요청을 실제 백엔드로 보냄
-  const API_ORIGIN = window.PROD_BACKEND || window.API_BASE || null;
+  function apiOrigin() {
+    return window.PROD_BACKEND || window.API_BASE || null;
+  }
+  function toAPI(p) {
+    try {
+      const u = new URL(p, location.href);
+      const ORI = apiOrigin();               // ← 매번 최신값 사용
+      if (ORI && /^\/(?:auth|api)\//.test(u.pathname)) {
+        return new URL(u.pathname + u.search + u.hash, ORI).toString();
+      }
+      return u.toString();
+    } catch { return p; }
+  }
   function toAPI(p) {
     try {
       const u = new URL(p, location.href);
