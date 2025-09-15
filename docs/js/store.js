@@ -1258,7 +1258,7 @@ window.__SERVER_GALLERY_SYNC_ON = SERVER_GALLERY_SYNC_ON;
     sendLogoutBeaconOnce();
     try { sessionStorage.removeItem("auth:flag"); } catch {}
     window.dispatchEvent(new CustomEvent("auth:state", { detail: { ready: true, authed: false } }));
-    location.href = "/login.html#loggedout";
+    location.href = "./login.html#loggedout";
   }
 
   // 전역에 노출

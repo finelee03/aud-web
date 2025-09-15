@@ -608,7 +608,7 @@
     notify(); try { window.dispatchEvent(new Event("auth:logout")); } catch {}
     markNavigate();
     const next = encodeURIComponent(location.pathname + location.search);
-    location.href = `/login.html?reset=1&next=${next}`;
+    location.href = `./login.html?reset=1&next=${next}`;
   }
   async function logout(){ return onLogoutClick(); }
 
@@ -637,7 +637,7 @@
       if (state.authed) { await getCSRF().catch(()=>null); return true; }
       const next = encodeURIComponent(location.pathname + location.search);
       markNavigate();
-      location.href = "/login.html?next=" + next;
+      location.href = "./login.html?next=" + next;
       return false;
     },
     getUser, login, signup, logout,

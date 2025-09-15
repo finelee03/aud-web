@@ -1,6 +1,6 @@
 (() => {
   // ① Render API 도메인으로 교체
-  const API = "https://YOUR_RENDER_APP.onrender.com";
+  const API = "https://<당신의-Render-도메인>.onrender.com";
 
   // 전역 상수로 노출
   window.PROD_BACKEND = API;
