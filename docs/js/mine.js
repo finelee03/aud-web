@@ -2727,7 +2727,8 @@ const LikeCache = (() => {
       (navigator.sendBeacon && navigator.sendBeacon("/auth/logout-beacon", blob)) ||
         await fetch("/auth/logout-beacon", { method: "POST", keepalive: true, credentials: "include" });
     } catch {}
-    try { sessionStorage.removeItem(AUTH_FLAG_KEY); } catch {}
+    try { sessionStorage.removeItem("auth:flag"); } catch {}
+    try { localStorage.removeItem("auth:flag"); localStorage.removeItem("auth:userns"); } catch {}
     try { window.dispatchEvent(new Event("auth:logout")); } catch {}
   }
 
@@ -2748,8 +2749,9 @@ const LikeCache = (() => {
 
       await __safeBeaconLogout();
       try { window.auth?.markNavigate?.(); } catch {}
-      const next = encodeURIComponent("../login.html");
-      location.assign(`${pageHref('login.html')}?next=${next}`);
+      const loginURL = new URL("./login.html", document.baseURI);
+      loginURL.searchParams.set("next", new URL("./mine.html", document.baseURI).href);
+      location.assign(loginURL.href);
     }, { capture: false });
 
     btn.addEventListener("keydown", (ev) => {

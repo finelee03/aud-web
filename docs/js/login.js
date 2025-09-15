@@ -64,9 +64,23 @@
   /* =============================================================
    *  1) TAB-SCOPED AUTH FLAG & NAV MARKING
    * ============================================================= */
-  const setAuthedFlag   = () => sessionStorage.setItem(AUTH_FLAG_KEY, "1");
-  const hasAuthedFlag   = () => sessionStorage.getItem(AUTH_FLAG_KEY) === "1";
-  const clearAuthedFlag = () => sessionStorage.removeItem(AUTH_FLAG_KEY);
+  const setAuthedFlag = () => {
+    try { sessionStorage.setItem(AUTH_FLAG_KEY, "1"); } catch {}
+    try { localStorage.setItem(AUTH_FLAG_KEY,  "1"); }  catch {}
+    // 탭 동기화 즉시 반영
+    try {
+      localStorage.setItem("auth:ping", String(Date.now()));
+      localStorage.removeItem("auth:ping");
+    } catch {}
+  };
+  const hasAuthedFlag = () =>
+    (sessionStorage.getItem(AUTH_FLAG_KEY) === "1") ||
+    (localStorage.getItem(AUTH_FLAG_KEY)  === "1");
+
+  const clearAuthedFlag = () => {
+    try { sessionStorage.removeItem(AUTH_FLAG_KEY); } catch {}
+    try { localStorage.removeItem(AUTH_FLAG_KEY);  } catch {}
+  };
 
   function markNavigate(){
     try { window.auth.markNavigate(); } catch {}
@@ -226,7 +240,16 @@
     try { localStorage.setItem("auth:userns", ns); } catch {}
     setAuthedFlag();
 
-    try { window.dispatchEvent(new CustomEvent("auth:state", { detail: { ready:true, authed:true, ns, user } })); } catch {}
+    // 탭 동기화 신호 (선택이지만 권장)
+    try {
+      localStorage.setItem("auth:ping", String(Date.now()));
+      localStorage.removeItem("auth:ping");
+    } catch {}
+
+    try {
+      window.dispatchEvent(new CustomEvent("auth:state", { detail: { ready:true, authed:true, ns, user } }));
+    } catch {}
+
     gotoNext();
   }
 
