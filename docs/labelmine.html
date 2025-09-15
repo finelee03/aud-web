@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <script src="./config.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Label</title>
+
+  <!-- 부트 아이디: 게스트 전용 초기화 기준 -->
+  <meta name="app-boot" content="2025-08-30T03:20:00Z" />
+
+  <!-- 단일 CSS -->
+  <link rel="stylesheet" href="./css/labelmine.css" />
+  <link rel="icon" href="/favicon.ico" />
+</head>
+<body>
+  <!-- 전 페이지를 단일 스코프로 감싼다 -->
+  <main class="labelmine-body">
+    <!-- NAV -->
+    <header class="nav">
+      <div class="nav-inner">
+        <ul class="menu">
+          <li><a href="./home.html">HOME</a></li>
+          <li><a href="./collect.html">Collect</a></li>
+          <li><a href="./gallery.html">Gallery</a></li>
+          <li><a href="./custom.html">Custom</a></li>
+        </ul>
+        <div class="logo-cta">
+          <a href="./mine.html"><img src="./asset/logo2.png" alt="logo" /></a>
+        </div>
+      </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="label-page">
+      <div class="hero">
+        <div id="categoryRow" class="category-row"></div>
+        <h1 id="lastLabel" class="title"></h1>
+      </div>
+    </section>
+
+    <!-- META (timestamp / heart) -->
+    <section class="label-sub">
+      <div class="stack">
+        <div id="timestamp" class="timestamp" aria-live="polite"></div>
+        <div id="heartButton" class="heart"></div>
+      </div>
+    </section>
+
+    <!-- BODY -->
+    <section>
+      <div class="container">
+        <!-- 라벨 이미지 박스 -->
+        <div id="labelmineGalleryBox" class="labelmine-gallery-box is-empty"></div>
+
+        <!-- SimpleDraw -->
+        <div class="labelmine-draw-wrap mt-20">
+          <div id="sdf-wrap" class="sdf-wrap" aria-label="drawing area">
+            <!-- 좌상단: 갤러리에서 불러오기 -->
+            <button id="sdf-import-btn" class="sdf-import-btn" title="갤러리에서 불러오기" aria-label="Import from Gallery"></button>
+
+            <!-- 우상단: 액션 -->
+            <div class="sdf-top-right">
+              <button id="sdf-reset-btn" class="sdf-reset-btn" title="Reset drawing" aria-label="Reset drawing">Reset</button>
+              <button id="sdf-save-btn"  class="sdf-save-btn"  title="Save to Gallery" aria-label="Save to Gallery">Save</button>
+            </div>
+
+            <!-- 캔버스 -->
+            <canvas id="sdf-screen" class="sdf-screen" tabindex="0" aria-label="canvas"></canvas>
+
+            <!-- 툴바 -->
+            <div id="sdf-toolbar" class="sdf-toolbar" aria-label="toolbar">
+              <div id="sdf-toolbar-inner" class="sdf-toolbar-inner">
+                <button id="sdf-handle" class="sdf-handle" title="툴바 이동 / 클릭하면 접힘/펼침" aria-label="Move toolbar or toggle collapse">
+                  <span class="sdf-dot"></span><span class="sdf-dot"></span><span class="sdf-dot"></span>
+                </button>
+                <div id="sdf-tools" class="sdf-tools" role="group" aria-label="tools">
+                  <button id="sdf-pen"    class="sdf-circle-btn is-active" title="펜 (P)"   aria-pressed="true"></button>
+                  <button id="sdf-eraser" class="sdf-circle-btn"           title="지우개 (E)" aria-pressed="false"></button>
+                  <div class="sdf-divider" aria-hidden="true"></div>
+                  <button id="sdf-color-btn" class="sdf-color-btn" title="색상 선택" aria-haspopup="dialog" aria-expanded="false">
+                    <span id="sdf-color-chip" class="sdf-color-chip"></span>
+                  </button>
+                  <label class="sdf-size-wrap" aria-label="pen size">
+                    <input id="sdf-size" type="number" min="1" max="120" value="12" />
+                    <span class="sdf-size-unit">px</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 색상패널/가져오기 모달이 붙는 포털 (스코프 안) -->
+          <div id="sdf-portal-root"></div>
+        </div>
+
+        <!-- Feed Composer가 JS로 여기 아래에 삽입됩니다 -->
+
+        <!-- 갤러리 가로 스크롤 -->
+        <section class="gh-outer mt-24">
+          <div id="gh-rail" class="gh-rail" data-label=""></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- 인스타그램 스타일 피드 모달 포털 (스코프 안) -->
+    <div id="feed-portal-root"></div>
+
+    <!-- ▼ 추가: 하단 중앙 POST 버튼 (CSS로만 배치) -->
+    <button id="feed-open-btn" class="feed-open-btn feed-open-btn--bottom" type="button" aria-label="새 게시물 만들기">POST</button>
+  </main>
+
+  <!-- (선택) 소켓 -->
+  <script src="https://YOUR_RENDER_APP.onrender.com/socket.io/socket.io.js"></script>
+
+  <!-- 전역 인증/세션 -->
+  <script defer src="./js/auth-boot.js"></script>
+  <script defer src="./js/auth-keepalive.js"></script>
+
+  <!-- store.js는 모듈(서버 동기화 어댑터가 여기서 window.store를 준비) -->
+  <script type="module" src="./js/store.js"></script>
+
+  <!-- 로고 가드 -->
+  <script defer src="./js/logo-guard.js"></script>
+
+  <!-- 🔽 당신이 보낸 JS 파일(아래 모듈들이 이 순서로 들어있으면 그대로 사용)
+       1) SDF 유틸/아이콘/로컬스토어
+       2) SimpleDraw
+       3) Gallery Horizontal
+       4) Feed Composer (간단형)
+       5) Feed Composer (모달형)
+       + 상단의 라벨/하트/타임스탬프 렌더러 포함 -->
+  <script defer src="./js/labelmine.js"></script>
+</body>
+</html>

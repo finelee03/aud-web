@@ -1,0 +1,538 @@
+/* =====================================================================
+   0) Base & Tokens
+===================================================================== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root{
+  /* Brand & UI */
+  --accent: #FFA765;
+  --text: #111;
+  --muted: #666;
+  --focus: #0B72FF;
+  --heart-red: #E53935;
+
+  /* Layout */
+  --nav-h: 64px;
+  --container-w: clamp(450px, 85vw, 1000px);
+
+  /* Quick/Feed spacing */
+  --feed-top-gap: 32px;
+  --feed-bottom-gap: 32px;
+
+  /* Post Modal Layout tokens (PM) */
+  --pm-gutter: 14px;
+  --pm-left: 600px;          /* 좌측(미디어) 최대폭 */
+  --pm-right: 450px;         /* 우측(텍스트) 고정폭 */
+  --pm-left-min: 300px;      /* 세로 전환 임계 좌측폭 */
+  --pm-lock-h: 450px;
+
+  /* Sheet geometry */
+  --sheet-w-max: 1280px;
+  --sheet-ar-num: 16;
+  --sheet-ar-den: 9;
+  --pm-fixed-h: 92dvh;
+
+  /* Hero 배경 */
+  --green: #A9B9CF;
+  --green-deep: #A9B9CF;
+
+    /* Icons (data URI) */
+  --ico-bell-off: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%237b8192' d='m20,8c2.206,0,4-1.794,4-4s-1.794-4-4-4-4,1.794-4,4,1.794,4,4,4Zm0-6c1.103,0,2,.897,2,2s-.897,2-2,2-2-.897-2-2,.897-2,2-2Zm3.272,14.247l-.005-.019s0,0,0-.001h0l-1.573-6.473c-.538.158-1.105.247-1.694.247-.104,0-.205-.01-.308-.016l1.637,6.735c.002.007.007.012.008.02h-.004c.082.308.021.615-.169.866-.192.255-.476.395-.796.395H3.493c-.305,0-.589-.137-.778-.371-.192-.24-.264-.548-.207-.812l2.352-9.117c.746-3.356,3.682-5.7,7.14-5.7.773,0,1.523.132,2.232.361.188-.661.484-1.275.872-1.821-.979-.348-2.025-.539-3.104-.539C7.598,0,3.859,2.988,2.916,7.233L.564,16.352c-.197.89.018,1.811.591,2.528.573.712,1.426,1.12,2.338,1.12h3.608c.465,2.279,2.484,4,4.899,4s4.434-1.721,4.899-4h3.47c.947,0,1.817-.433,2.39-1.186.556-.733.739-1.66.514-2.55-.001-.006,0-.011,0-.017Zm-11.272,5.753c-1.302,0-2.402-.839-2.816-2h5.631c-.414,1.161-1.514,2-2.816,2Z'/></svg>");
+--ico-bell-on:  url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23FF884D' d='m23.63,16.862l-2.03-7.973c-.356.073-.723.111-1.1.111-.733,0-1.431-.147-2.072-.408l2.14,8.408H3.419l2.291-8.955c.66-2.971,3.247-5.045,6.29-5.045,1.076,0,2.105.27,3.013.748-.004-.083-.013-.164-.013-.248,0-.993.269-1.923.731-2.729-1.154-.498-2.419-.771-3.731-.771C7.54,0,3.75,3.041,2.793,7.348L.321,17.011c-.153.702.035,1.47.503,2.053.478.596,1.188.937,1.951.937h4.142c.563,2.293,2.617,4,5.084,4s4.521-1.707,5.084-4h4.128c.789,0,1.515-.36,1.99-.986.407-.535.562-1.193.472-1.846-.004-.101-.019-.204-.045-.306Zm-6.63-13.362c0-1.93,1.57-3.5,3.5-3.5s3.5,1.57,3.5,3.5-1.57,3.5-3.5,3.5-3.5-1.57-3.5-3.5Z'/></svg>");
+  --notify-on: #FF884D;
+}
+
+html, body { height: 100%; }
+body{
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: var(--text);
+  background: #F5F5F5;
+  min-width: 475px;
+}
+
+/* 접근성: 키보드 포커스 링 */
+:where(a, button, [role="button"], input, select, textarea):focus-visible{
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* =====================================================================
+   1) Utilities
+===================================================================== */
+.container{ inline-size: var(--container-w); margin-inline: auto; }
+.fullbleed{
+  inline-size: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+}
+.row{ display:flex; align-items:center; gap:.5rem; }
+.row.between{ justify-content:space-between; }
+
+/* =====================================================================
+   2) Nav
+===================================================================== */
+header.nav{
+  position: sticky; top: 0; z-index: 100;
+  height: var(--nav-h);
+  background: #F5F5F5;
+}
+.nav-inner{
+  height: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 27px;
+}
+.menu{ list-style: none; display: flex; gap: 20px; }
+.menu a{
+  color: #333; text-decoration: none;
+  font-weight: 500; font-size: 15px;
+  opacity: .9; transition: opacity .2s ease, color .2s ease;
+}
+.menu a:hover{ opacity: 1; color: #000; }
+.menu a.active{ font-weight: 600; color: #000; }
+.logo-cta img{ inline-size: 27px; block-size: 27px; object-fit: contain; }
+
+/* =====================================================================
+   3) Profile Hero
+===================================================================== */
+.me{ inline-size: var(--container-w); margin: 0 auto 64px; }
+.profile-hero{
+  margin-top: 18px; padding: 20px 22px; border-radius: 22px;
+  background: linear-gradient(180deg,
+              color-mix(in oklab, var(--green) 90%, white 10%),
+              var(--green-deep));
+  color: #0d3800;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+}
+.ph-left{ display: flex; align-items: center; gap: 16px; min-width: 0; }
+
+/* =====================================================================
+   4) Avatar (no inline styles) + Avatar Modal
+===================================================================== */
+.avatar{
+  inline-size: 88px; block-size: 88px;
+  border-radius: 22px;
+  display: grid; place-items: center;
+  font-weight: 700;
+  position: relative; overflow: hidden;
+  background: hsl(var(--h) 75% 85%);
+  color: hsl(var(--h) 60% 28%);
+  user-select: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,.08);
+}
+.avatar::after{
+  content: attr(data-initials);
+  font-size: 30px; line-height: 1; letter-spacing: .5px;
+}
+.avatar.url-mode{ background:#e9e9ec; color:transparent; }
+.avatar.url-mode::after{ content:""; }
+
+/* 24단계 Hue */
+.avatar.h0  { --h:   0 } .avatar.h1  { --h:  15 } .avatar.h2  { --h:  30 }
+.avatar.h3  { --h:  45 } .avatar.h4  { --h:  60 } .avatar.h5  { --h:  75 }
+.avatar.h6  { --h:  90 } .avatar.h7  { --h: 105 } .avatar.h8  { --h: 120 }
+.avatar.h9  { --h: 135 } .avatar.h10 { --h: 150 } .avatar.h11 { --h: 165 }
+.avatar.h12 { --h: 180 } .avatar.h13 { --h: 195 } .avatar.h14 { --h: 210 }
+.avatar.h15 { --h: 225 } .avatar.h16 { --h: 240 } .avatar.h17 { --h: 255 }
+.avatar.h18 { --h: 270 } .avatar.h19 { --h: 285 } .avatar.h20 { --h: 300 }
+.avatar.h21 { --h: 315 } .avatar.h22 { --h: 330 } .avatar.h23 { --h: 345 }
+
+#me-avatar.avatar{ border-radius: 50%; overflow: hidden; }
+#me-avatar.avatar .avatar-img{
+  display:none; width:100%; height:100%; object-fit:cover;
+}
+#me-avatar.avatar.url-mode .avatar-img{ display:block; }
+#me-avatar.avatar.url-mode::before{ content:""; }
+
+/* Avatar Modal */
+#avatar-modal .sheet{ inline-size: min(640px, 96vw); }
+#avatar-modal .cropper{
+  display:grid; place-items:center; margin:14px 0 10px;
+}
+#avatar-modal #av-canvas{
+  display:block; margin-inline:auto; max-inline-size:100%;
+  aspect-ratio: 1 / 1; block-size:auto;
+}
+
+/* =====================================================================
+   5) Typography blocks
+===================================================================== */
+.name-block{ min-width: 0; }
+.display-name{ margin: 0; font-size: 28px; letter-spacing: -.2px; font-weight: 800; line-height: 1.1; }
+.email{ margin: .25rem 0 0; color: #111; font-weight: 600; opacity: .9; }
+.badge-line{ margin-top: 6px; }
+.grade-badge{
+  display: inline-block; padding: 6px 10px; border-radius: 9999px;
+  font-weight: 700; font-size: 12px;
+  background: #fff; color: #111;
+  border: 1px solid rgba(0,0,0,.06); box-shadow: 0 1px 0 rgba(0,0,0,.04) inset;
+}
+
+/* =====================================================================
+   6) Buttons
+===================================================================== */
+.ph-right{ display: flex; gap: 8px; flex: 0 0 auto; }
+.btn{
+  appearance: none;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 9999px;
+  padding: 10px 16px;
+  font-weight: 700; line-height: 1;
+  cursor: pointer;
+  background: #fff; color: #111;
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease, opacity .15s ease;
+}
+.btn:hover{ transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,.08); }
+.btn[aria-busy="true"]{ opacity: .7; pointer-events: none; }
+.btn.primary, .btn-primary{
+  background: var(--accent); color: #111; border-color: transparent;
+}
+.btn.primary:hover, .btn-primary:hover{ filter: brightness(.98); transform: translateY(-1px); }
+.btn.ghost{ background: #fff; color: #111; }
+
+/* =====================================================================
+   7) Insights (상단 KPI)
+===================================================================== */
+.insights{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0 8px;
+}
+.panel{ background: #fff; border-radius: 18px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+.panel h3{ margin: 0 0 10px; font-size: 16px; }
+.kpi-lg{ display: flex; align-items: baseline; gap: 10px; }
+.kpi-lg b{ font-size: 28px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; }
+.kpi-lg span{ font-size: 13px; color: var(--muted); }
+.rate-box h3{ font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+.rate{ display: grid; gap: 8px; }
+.rate .bar{ height: 10px; background: #f1f3f5; border-radius: 999px; overflow: hidden; }
+.rate .bar i{ display: block; height: 100%; width: 0%; background: #222; transition: width .35s ease; }
+.rate .num{ display: flex; gap: 8px; align-items: baseline; }
+.rate .num b{ font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.rate .num span{ font-size: 12px; color: var(--muted); }
+
+/* =====================================================================
+   8) Progress Bar — <progress> / div.pXX
+===================================================================== */
+progress#m-rate-bar{
+  --bar-h: 8px;
+  inline-size: 100%; block-size: var(--bar-h);
+  border: none; border-radius: 9999px;
+  background: #e9e9ec; overflow: hidden;
+}
+progress#m-rate-bar::-moz-progress-bar{
+  background: linear-gradient(90deg, var(--accent), #ffc79f);
+  border-radius: 9999px;
+}
+progress#m-rate-bar::-webkit-progress-bar{
+  background: #e9e9ec; border-radius: 9999px;
+}
+progress#m-rate-bar::-webkit-progress-value{
+  background: linear-gradient(90deg, var(--accent), #ffc79f);
+  border-radius: 9999px;
+}
+#m-rate-bar{
+  position: relative;
+  inline-size: 100%; block-size: 8px;
+  background: #e9e9ec; border-radius: 9999px; overflow: hidden;
+}
+#m-rate-bar::before{
+  content: ""; position: absolute; inset: 0; inline-size: 0%;
+  background: linear-gradient(90deg, var(--accent), #ffc79f);
+  border-radius: inherit;
+}
+#m-rate-bar.p0::before   { inline-size: 0% }
+#m-rate-bar.p5::before   { inline-size: 5% }
+#m-rate-bar.p10::before  { inline-size: 10% }
+#m-rate-bar.p15::before  { inline-size: 15% }
+#m-rate-bar.p20::before  { inline-size: 20% }
+#m-rate-bar.p25::before  { inline-size: 25% }
+#m-rate-bar.p30::before  { inline-size: 30% }
+#m-rate-bar.p35::before  { inline-size: 35% }
+#m-rate-bar.p40::before  { inline-size: 40% }
+#m-rate-bar.p45::before  { inline-size: 45% }
+#m-rate-bar.p50::before  { inline-size: 50% }
+#m-rate-bar.p55::before  { inline-size: 55% }
+#m-rate-bar.p60::before  { inline-size: 60% }
+#m-rate-bar.p65::before  { inline-size: 65% }
+#m-rate-bar.p70::before  { inline-size: 70% }
+#m-rate-bar.p75::before  { inline-size: 75% }
+#m-rate-bar.p80::before  { inline-size: 80% }
+#m-rate-bar.p85::before  { inline-size: 85% }
+#m-rate-bar.p90::before  { inline-size: 90% }
+#m-rate-bar.p95::before  { inline-size: 95% }
+#m-rate-bar.p100::before { inline-size: 100% }
+
+/* =====================================================================
+   9) Quick Panels (컬렉션 요약 등)
+===================================================================== */
+.quick{
+  margin-top: 18px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.grid-3{ display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.kpi{ display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.kpi b{ font-size: 20px; }
+.kpi span{ font-size: 12px; color: #777; }
+.panel .list{ list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.panel .list li{ display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+.panel .list li b{ font-variant-numeric: tabular-nums; color: #333; }
+
+/* =====================================================================
+   10) Notifications panel
+   기대 HTML
+     <article class="panel notify">
+       <div class="panel-head">
+         <h3>알림</h3>
+         <label class="switch">
+           <input id="notify-toggle" type="checkbox" />
+           <span class="slider" aria-hidden="true"></span>
+         </label>
+       </div>
+       <ul id="notify-list" class="notify-list"></ul>
+       <p id="notify-empty" class="notify-empty">아직 알림이 없습니다</p>
+     </article>
+===================================================================== */
+.panel.notify .panel-head{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:.75rem;
+}
+.panel.notify h3{ margin:0; font-size:16px; font-weight:700; letter-spacing:.2px; }
+
+/* ===================== 토글 스위치: 아이콘 색만 변환 ===================== */
+.switch{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 42px;
+  height: 24px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 실제 체크박스 숨김 */
+.switch input{
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 캡슐(배경은 항상 동일, 색 안 바뀜) */
+.switch .slider{
+  position: relative;
+  display: block;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: #E6E8EF; /* ✔ 배경 유지 */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
+  transition: box-shadow .18s ease;
+}
+
+/* 키보드 포커스 링 */
+.switch input:focus-visible + .slider{
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+/* 중앙 아이콘 (기본: OFF 아이콘) */
+.switch .slider::after{
+  content:"";
+  position:absolute; inset:0;
+  width:18px; height:18px; margin:auto;
+  background: center / 18px 18px no-repeat var(--ico-bell-off);
+}
+
+/* 체크 시 아이콘만 주황(#FF884D)으로 변경 */
+.switch input:checked + .slider::after{
+  background-image: var(--ico-bell-on); /* 데이터 URI에 fill=%23FF884D */
+}
+
+/* ===================== 아이콘형 스위치(선택형) ===================== */
+/* 구조 예:
+   <label class="switch icon">
+     <input id="notify-toggle" type="checkbox" />
+     <span class="notify-icon"></span>
+   </label>
+*/
+.switch.icon{
+  width:auto; height:auto;
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:6px;
+  border-radius:10px;
+  background: transparent; /* ✔ 배경 안 바꿈 */
+  cursor:pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 아이콘 본체: 기본은 OFF 아이콘(회색/검정) */
+.switch.icon .notify-icon{
+  inline-size: 24px;
+  block-size: 24px;
+  flex: 0 0 24px;
+  background: center / contain no-repeat var(--ico-bell-off);
+}
+
+/* 체크 시 아이콘만 주황(#FF884D) */
+.switch.icon input:checked ~ .notify-icon{
+  background-image: var(--ico-bell-on); /* fill=%23FF884D */
+}
+
+/* 접근성: 포커스 */
+.switch.icon input:focus-visible ~ .notify-icon{
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* 알림 리스트/아이템 */
+.notify-list{
+  list-style:none; margin:0; padding:0;
+  display:flex; flex-direction:column; gap:.5rem;
+}
+.notice{
+  padding:.75rem .9rem;
+  border:1px solid rgba(0,0,0,.06);
+  border-radius:12px; background:#fff;
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  animation: noticeIn .18s ease-out both;
+}
+.notice:hover{
+  background:#fafbff;
+  border-color: rgba(58,111,255,.22);
+  box-shadow: 0 1px 8px rgba(0,0,0,.05);
+}
+@keyframes noticeIn{
+  from{ opacity:.0; transform: translateY(-3px); }
+  to{ opacity:1; transform: translateY(0); }
+}
+.notice .time{ font-size:.85rem; color:#7b8192; margin-left:.75rem; }
+.notice .sub{ margin:.35rem 0 0; color:#586074; font-size:.92rem; line-height:1.35; }
+
+/* 빈 상태 */
+.notify-empty{ margin:.5rem 0 0; color:#8a8f9f; font-size:.92rem; }
+
+/* 패널을 위치 기준으로 만들기 */
+.panel.notify { 
+  position: relative; 
+}
+
+/* 토글을 우측 상단에 고정 */
+.panel.notify .notify-toggle{
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+}
+
+/* 제목과 겹치지 않게 오른쪽 여백 확보(아이콘 폭+여유) */
+.panel.notify .panel-title{
+  margin: 0 0 .5rem;
+  font-size: 16px;
+  font-weight: 700;
+  padding-right: 48px;  /* 토글 가로 약 24px + 여백 */
+}
+
+
+
+/* =====================================================================
+   11) PM Sheet (양옆 → 세로 전환 규칙)
+===================================================================== */
+.pm.sheet{
+  inline-size: min(100%, var(--sheet-w-max));
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(var(--pm-left-min), var(--pm-left)) minmax(320px, var(--pm-right));
+  gap: var(--pm-gutter);
+  align-items: stretch;
+}
+/* 컨테이너 쿼리 */
+.pm.sheet{ container-type: inline-size; }
+@container (max-width: 980px){
+  .pm.sheet{ grid-template-columns: 1fr; }
+}
+/* 폴백 */
+@media (max-width: 1000px){
+  .pm.sheet{ grid-template-columns: 1fr; }
+}
+.pm .left{ min-inline-size: 0; }
+.pm .right{
+  min-inline-size: 0;
+  position: relative;
+  max-block-size: var(--pm-fixed-h);
+  overflow: auto;
+  background: #fff; border-radius: 16px;
+}
+
+/* =====================================================================
+   12) Modal (편집 모달: #edit-modal)
+===================================================================== */
+.modal{
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  padding: 20px;
+  background: rgba(0,0,0,.0);
+  pointer-events: none; opacity: 0;
+  transition: opacity .18s ease, background .18s ease;
+}
+.modal.open{
+  background: rgba(0,0,0,.36);
+  pointer-events: auto; opacity: 1;
+}
+.modal .sheet{
+  inline-size: min(560px, 92vw);
+  background: #fff; border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+  padding: 18px 18px 16px;
+  transform: translateY(8px);
+  transition: transform .18s ease, opacity .18s ease;
+  opacity: .98;
+}
+.modal.open .sheet{ transform: translateY(0); opacity: 1; }
+.modal .overlay{ position: fixed; inset: 0; background: transparent; border: 0; cursor: default; }
+.modal .title{ font-size: 20px; font-weight: 800; margin: 2px 4px 14px; }
+.form-row{ display: grid; gap: 6px; margin: 10px 4px; }
+.form-row > label{ font-size: 13px; font-weight: 700; color: #222; }
+.form-row > input{
+  appearance: none; background:#fff;
+  border: 1px solid rgba(0,0,0,.14); border-radius: 12px;
+  padding: 12px 14px; font-size: 14px;
+}
+.form-row > input:focus-visible{ outline: 2px solid var(--focus); border-color: transparent; }
+.hint{ font-size: 12px; color: var(--muted); margin: 4px 4px 0; }
+.fieldset{
+  border: 1px solid rgba(0,0,0,.08); border-radius: 14px;
+  padding: 8px 10px 12px; margin: 12px 4px 8px;
+}
+.fieldset > legend{ padding: 0 6px; font-size: 12px; font-weight: 800; color: #333; }
+.actions{
+  display: flex; gap: 8px; justify-content: flex-end; align-items: center;
+  margin: 14px 4px 0;
+}
+.msg{ font-size: 13px; color: #FFA765; margin: 10px 4px 0; min-height: 1.2em; }
+@media (prefers-reduced-motion: reduce){
+  .modal, .modal .sheet{ transition: none; }
+}
+
+/* =====================================================================
+   13) Responsive (global)
+===================================================================== */
+@media (max-width: 860px){
+  .insights{ grid-template-columns: 1fr; }
+  .quick{ grid-template-columns: 1fr; }
+  .profile-hero{ flex-direction: column; align-items: flex-start; }
+  .ph-right{ align-self: stretch; }
+  .panel.notify .panel-head{ align-items:flex-start; }
+}
+
+/* =====================================================================
+   14) Helpers
+===================================================================== */
+.sr-only{
+  position: absolute !important; inline-size: 1px; block-size: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 1px, 1px); white-space: nowrap; border: 0;
+}

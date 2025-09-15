@@ -1,0 +1,684 @@
+/* =====================================================================
+   LabelMine — Scoped Styles (image 600px fixed + post 300px fixed)
+   적용: <main class="labelmine-body"> ... </main>
+   팝업 기본 폭: 950px (600 + 350, column-gap = 0)
+===================================================================== */
+
+/* =====================================================================
+   0) VARIABLES & BASE (scoped)
+===================================================================== */
+.labelmine-body{
+  /* Tokens */
+  --accent:#FFA765; --text:#111; --muted:#666; --bg:#FFFFFF;
+
+  /* Layout */
+  --nav-h:64px; --radius:12px; --radius-lg:16px; --radius-xx:9999px;
+
+  /* SimpleDraw Toolbar */
+  --TB-H:48px; --TB-ITEM:40px; --TB-PAD-V:4px; --TB-PAD-H:15px;
+
+  /* Others */
+  --edgeR:12px;                /* 내부 버튼(Reset/Save) 우측 인셋 */
+  --post-nudge-x:0px;          /* POST 수평 미세이동 (기본 0) */
+
+  /* 공통 스테이지 폭(본문: 캔버스/갤러리/액션바/피드) */
+  --STAGE-W:min(80vw, 1120px);
+
+  /* 팝업/크롭 공통 목표 폭 */
+  --TARGET-W:600px;
+
+  /* Ring / Shadow */
+  --ring:0 0 0 3px rgba(39,89,153,.18);
+  --shadow-1:0 8px 24px rgba(0,0,0,0.12);
+  --shadow-2:0 12px 32px rgba(0,0,0,0.16);
+
+  /* Split border */
+  --split-border:#e5e7eb;
+
+  /* Back icon (CSS mask) */
+  --ico-arrow-left:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none' viewBox='0 0 24 24'%3E%3Cpath stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M5 12h14M5 12l4-4m-4 4 4 4'/%3E%3C/svg%3E");
+
+  padding-bottom:50px;
+  color:var(--text); background:var(--bg); min-width:475px;
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+}
+/* 변수 전파(모달이 body 아래로 붙는 경우 대비) */
+body:has(.labelmine-body){
+  --ico-arrow-left:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none' viewBox='0 0 24 24'%3E%3Cpath stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M5 12h14M5 12l4-4m-4 4 4 4'/%3E%3C/svg%3E");
+}
+
+/* =====================================================================
+   0) Base
+===================================================================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --accent: #FFA765;
+  --nav-h: 64px;
+  --text: #111;
+  --muted: #666;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: var(--text);
+  background: #ffffff;
+  min-width: 475px;
+}
+
+/* =====================================================================
+   1) Nav
+===================================================================== */
+header.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--nav-h);
+  background: #FFFFFF;
+}
+
+.nav-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 27px;
+}
+
+.menu {
+  list-style: none;
+  display: flex;
+  gap: 20px;
+}
+
+.menu a {
+  color: #333;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 15px;
+  opacity: .9;
+  transition: .2s;
+}
+
+.menu a:hover {
+  opacity: 1;
+  color: #000;
+}
+
+.menu a.active {
+  font-weight: 600;
+  color: #000;
+}
+
+.logo-cta img {
+  width: 27px;
+  height: 27px;
+  object-fit: contain;
+}
+/* =====================================================================
+   2) HERO & STACK
+===================================================================== */
+.labelmine-body .hero{ max-width:960px; margin:0 auto; text-align:center; padding-top:60px; }
+.labelmine-body .title{
+  margin:8px 0 0; font-weight:600; color:#111; letter-spacing:-.04em; text-transform:uppercase; line-height:1.1; font-size:40px;
+}
+.labelmine-body .subtitle{ margin-top:5px; font-size:24px; color:#888; font-weight:400; }
+.labelmine-body .stack{
+  max-width:960px; margin:0 auto; text-align:center; padding-top:30px;
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+}
+
+/* =====================================================================
+   3) CATEGORY & STARS
+===================================================================== */
+.labelmine-body .category-row{ display:inline-flex; gap:10px; align-items:center; justify-content:center; margin:8px 0 12px; }
+.labelmine-body .pill{ display:inline-flex; height:29px; align-items:center; justify-content:center; background:#F4F4F4; border-radius:8px; padding:0 8px; }
+.labelmine-body .pill__text{ font-weight:400; color:#666; font-size:18px; letter-spacing:-.02em; line-height:1.6; }
+.labelmine-body .stars{ display:inline-flex; align-items:center; gap:0; height:29px; }
+.labelmine-body .stars svg{ width:19px; height:19px; display:block; }
+.labelmine-body .stars svg path{ stroke:#666; stroke-width:1.3; }
+
+/* =====================================================================
+   4) BODY BLOCKS
+===================================================================== */
+.labelmine-body .timestamp{
+  height:26px; width:100%; display:flex; align-items:center; justify-content:center; text-align:center;
+  color:#999; font-size:16px; padding:0 8px; font-weight:400;
+}
+.labelmine-body .heart{
+  display:flex; align-items:center; justify-content:center; gap:8px; margin-top:12px; color:#777; font-size:16px; user-select:none;
+}
+.labelmine-body .heart button{
+  display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:none; border:0; padding:0; cursor:pointer;
+}
+.labelmine-body .heart svg{ width:24px; height:24px; display:block; }
+.labelmine-body .heart.is-disabled{ cursor:default; opacity:.7; }
+.labelmine-body .container{ display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:30px; }
+.labelmine-body .labelmine-gallery-box{
+  width:300px; height:300px; background:transparent; border-radius:var(--radius-lg);
+  overflow:hidden; display:flex; align-items:center; justify-content:center;
+}
+.labelmine-body .labelmine-gallery-box img{
+  width:100%; height:100%; display:block; object-fit:cover; transform:scale(2.1); transform-origin:center;
+}
+.labelmine-body .labelmine-gallery-box.is-empty{ border:1px dashed #d9d9d9; border-radius:var(--radius-lg); }
+
+/* =====================================================================
+   5) SIMPLE DRAW (Wrapper / Toolbar / Modal)
+===================================================================== */
+.labelmine-body .sdf-wrap{
+  position:relative; width:var(--STAGE-W); height:560px; margin:0 auto;
+  overflow:hidden; touch-action:none; overscroll-behavior:none;
+  border-radius:8px; border:1px solid #e5e7eb; background:#fff;
+}
+.labelmine-body .sdf-screen{
+  position:absolute; inset:0; border:0; border-radius:0; background:transparent;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  touch-action:none; overscroll-behavior:none;
+}
+/* Import / Save Buttons */
+.labelmine-body #sdf-import-btn,
+.labelmine-body .sdf-import-btn{
+  position:absolute; left:12px; top:12px; z-index:40; width:40px; height:40px;
+  display:grid; place-items:center; background:#fff; border:1px solid #e5e7eb; border-radius:20px;
+  box-shadow:0 4px 10px rgba(0,0,0,0.1); cursor:pointer;
+}
+.labelmine-body .sdf-import-btn svg{
+  width:calc(var(--TB-ITEM,40px)*0.6); height:calc(var(--TB-ITEM,40px)*0.6); display:block;
+}
+.labelmine-body .sdf-top-right{
+  position:absolute; top:12px; right:var(--edgeR); display:flex; gap:8px; align-items:center; z-index:30;
+}
+.labelmine-body .sdf-reset-btn,
+.labelmine-body .sdf-save-btn{
+  min-width:70px; height:40px; border:none; border-radius:12px; padding:0 18px;
+  font-size:14px; font-weight:600; cursor:pointer; background:#E0E0E0; color:#000;
+  box-shadow:0 4px 10px rgba(0,0,0,0.1);
+}
+.labelmine-body .sdf-save-btn.is-active,
+.labelmine-body .sdf-reset-btn.is-active{ background:#FF884D; color:#fff; }
+/* Toolbar */
+.labelmine-body .sdf-toolbar{
+  position:absolute; left:50%; bottom:16px; transform:translateX(-50%); z-index:20; height:var(--TB-H); touch-action:none;
+}
+.labelmine-body .sdf-toolbar.is-floating{ transform:none; }
+.labelmine-body .sdf-toolbar-inner{
+  display:flex; align-items:center; gap:0; height:var(--TB-H);
+  padding:var(--TB-PAD-V) var(--TB-PAD-H) var(--TB-PAD-V) 0;
+  border:1px solid #e5e7eb; border-radius:9999px; background:#fff;
+  box-shadow:0 6px 14px rgba(0,0,0,0.08);
+  transition:padding 160ms ease, width 160ms ease, gap 160ms ease, border-radius 160ms ease;
+  width:300px; overflow:hidden;
+}
+.labelmine-body .sdf-toolbar.is-collapsed .sdf-toolbar-inner{ width:var(--TB-H); padding:0; border-radius:50%; }
+.labelmine-body .sdf-handle{
+  width:var(--TB-H); height:var(--TB-H); display:flex; flex-direction:column; gap:3px;
+  align-items:center; justify-content:center; cursor:grab; flex:0 0 auto; user-select:none; border:0; background:transparent;
+}
+.labelmine-body .sdf-dot{ width:4px; height:4px; border-radius:50%; background:#d1d5db; display:block; }
+.labelmine-body .sdf-tools{
+  display:flex; align-items:center; gap:6px; height:calc(var(--TB-H) - var(--TB-PAD-V) * 2); overflow:hidden;
+}
+.labelmine-body .sdf-divider{ width:1px; height:24px; background:#e5e7eb; margin:0 4px; }
+.labelmine-body .sdf-circle-btn{
+  width:var(--TB-ITEM); height:var(--TB-ITEM); display:grid; place-items:center;
+  border:1px solid #e5e7eb; border-radius:var(--radius-xx); background:#f9fafb;
+}
+.labelmine-body .sdf-circle-btn.is-active{ background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+
+/* 5-1) Color Picker */
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-color-panel{
+  position:fixed;
+  left:var(--pop-x,50%); top:var(--pop-y,50%); transform:translate(-50%,0);
+  background:#fff; border:1px solid #e5e7eb; border-radius:12px;
+  box-shadow:0 12px 24px rgba(0,0,0,.18);
+  padding:12px; z-index:5600; display:flex; flex-direction:column; gap:10px;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-color-btn{
+  width:40px; height:40px; display:grid; place-items:center; cursor:pointer;
+  border:1px solid #e5e7eb; border-radius:9999px; background:#fff;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-color-btn:focus-visible{
+  outline:none; box-shadow:0 0 0 3px rgba(39,89,153,.18);
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-color-btn .sdf-color-ico{ display:grid; place-items:center; }
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-color-btn svg{ width:20px; height:20px; display:block; }
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-color-chip{
+  width:22px; height:22px; border:1px solid rgba(0,0,0,.08);
+  border-radius:9999px; box-shadow:inset 0 1px 0 rgba(0,0,0,.04);
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-color-keys{ display:flex; align-items:center; gap:6px; margin-left:6px; }
+
+/* 밝기 슬라이더 */
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-brightness{
+  width:100%; height:10px; border-radius:9999px; -webkit-appearance:none; appearance:none; outline:none;
+  background:linear-gradient(to right,#000,#fff);
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-brightness::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%;
+  background:#111; box-shadow:0 0 0 3px #fff, 0 1px 0 rgba(0,0,0,.1); cursor:pointer;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-brightness::-moz-range-track{ height:6px; border-radius:9999px; background:transparent; }
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-brightness::-moz-range-thumb{
+  width:14px; height:14px; border:0; border-radius:50%;
+  background:#111; box-shadow:0 0 0 3px #fff, 0 1px 0 rgba(0,0,0,.1); cursor:pointer;
+}
+
+/* 컬러픽커 행 */
+:is(.labelmine-body, body:has(.labelmine-body)) .im-group{
+  font-size:15px; font-weight:500;
+  margin:8px 0 8px;              /* 라벨 위아래 여백 */
+}
+
+:is(.labelmine-body, body:has(.labelmine-body)) .im-row-color{
+  display:flex; align-items:center; gap:8px; flex-wrap:nowrap; padding:4px 0;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-row-color .sdf-color-keys{
+  display:flex; align-items:center; gap:8px;
+  margin-left:0; flex-wrap:nowrap; position:relative; padding-left:10px;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-row-color .sdf-color-keys::before{
+  content:""; position:absolute; left:0; top:50%; transform:translateY(-50%);
+  width:1px; height:26px; background:var(--split-border, #e5e7eb); border-radius:1px;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-row-color .sdf-color-btn{ flex:0 0 auto; }
+:is(.labelmine-body, body:has(.labelmine-body)) .im-row-color .sdf-color-btn:first-child::after{ content:none; }
+
+/* =====================================================================
+   6) SIMPLE DRAW — Legacy modal (asset picker) — Step1 = Step2 사이즈/무드
+===================================================================== */
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-modal-backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,.45);
+  display:grid; place-items:center; z-index:4200;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-modal{
+  width:600px; height:645px;                 /* Step2와 동일 크기 */
+  background:#fff; border-radius:25px;       /* 동일 라운드 */
+  box-shadow:0 20px 60px rgba(0,0,0,.35);    /* 동일 섀도우 */
+  display:grid; grid-template-rows:45px 1fr; /* 헤더 45px */
+  overflow:hidden; padding:0; gap:0; isolation:isolate;
+}
+/* Header */
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-modal-head{
+  display:grid; grid-template-columns:45px 1fr 45px;
+  align-items:center; border-bottom:1px solid #e5e7eb;
+  position:relative; height:45px; margin:0; padding:0;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-modal-title{
+  position:absolute; left:50%; transform:translateX(-50%);
+  width:max-content; text-align:center; font-weight:700; letter-spacing:.01em; font-size:17px;
+}
+/* (있는 경우) 헤더 내부 닫기 버튼은 숨김 — 외부 고정 X 사용 */
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-modal .sdf-modal-close{
+  display:none !important;
+}
+/* Body & Grid */
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-modal-body{
+  overflow:auto; padding:12px; min-height:0;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-empty{
+  color:#6b7280; padding:24px; text-align:center;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-grid{
+  display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-grid > button{
+  border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:6px;
+  cursor:pointer; display:flex; flex-direction:column; gap:6px; text-align:left; overflow:hidden;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-grid > button:hover{
+  outline:2px solid rgba(39,89,153,.18);
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-grid > button:focus-visible{
+  outline:2px solid rgba(39,89,153,.38); outline-offset:2px;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .sdf-grid img{
+  width:100%; height:140px; object-fit:cover; border-radius:8px; display:block;
+}
+
+/* =====================================================================
+   GLOBAL — Modal Close(X) 통합 (최종)
+   - :has() 미사용
+   - 자식 결합자(>) 미사용: 버튼이 백드롭의 직계가 아니어도 동작
+   - viewport 기준 fixed + 초고 z-index
+===================================================================== */
+
+:root { --lm-x-z: 2147483646; } /* 최상단에 보장 */
+
+/* 버튼 자체 */
+.imodal-backdrop .im-head-close,
+.cmodal-backdrop .im-head-close,
+.sdf-modal-backdrop .im-head-close {
+  position: fixed !important;
+  top: calc(16px + env(safe-area-inset-top, 0px)) !important;
+  right: calc(16px + env(safe-area-inset-right, 0px)) !important;
+  z-index: var(--lm-x-z) !important;
+
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 9999px;
+  cursor: pointer; pointer-events: auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+
+/* 아이콘(X) */
+.imodal-backdrop .im-head-close .im-x,
+.cmodal-backdrop .im-head-close .im-x,
+.sdf-modal-backdrop .im-head-close .im-x {
+  position: relative; width: 14px; height: 14px;
+}
+.imodal-backdrop .im-head-close .im-x::before,
+.imodal-backdrop .im-head-close .im-x::after,
+.cmodal-backdrop .im-head-close .im-x::before,
+.cmodal-backdrop .im-head-close .im-x::after,
+.sdf-modal-backdrop .im-head-close .im-x::before,
+.sdf-modal-backdrop .im-head-close .im-x::after {
+  content: ""; position: absolute; left: 6px; top: -1px;
+  width: 2px; height: 16px; background: #111; border-radius: 2px;
+}
+.imodal-backdrop .im-head-close .im-x::before,
+.cmodal-backdrop .im-head-close .im-x::before,
+.sdf-modal-backdrop .im-head-close .im-x::before { transform: rotate(45deg); }
+.imodal-backdrop .im-head-close .im-x::after,
+.cmodal-backdrop .im-head-close .im-x::after,
+.sdf-modal-backdrop .im-head-close .im-x::after { transform: rotate(-45deg); }
+
+/* 포커스 접근성 */
+.imodal-backdrop .im-head-close:focus-visible,
+.cmodal-backdrop .im-head-close:focus-visible,
+.sdf-modal-backdrop .im-head-close:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px rgba(0,0,0,.06);
+}
+
+/* (선택) 크롭(step2)이 열리면 작성(step1) X는 숨김 */
+.cmodal-backdrop ~ .imodal-backdrop .im-head-close { display: none !important; }
+
+/* =====================================================================
+   7) GALLERY — Horizontal rail
+===================================================================== */
+.labelmine-body .gh-outer{ width:var(--STAGE-W); max-width:var(--STAGE-W); padding:8px 0; margin:0 auto; overflow:hidden; }
+.labelmine-body .gh-rail{
+  display:flex; gap:14px; overflow-x:auto; overflow-y:hidden; padding-bottom:4px;
+  scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch;
+}
+.labelmine-body .gh-card{
+  position:relative; flex:0 0 auto; width:280px;
+  border:1px solid #e5e7eb; border-radius:14px; background:#fff; padding:8px; scroll-snap-align:start;
+}
+.labelmine-body .gh-thumb{ width:100%; height:180px; object-fit:cover; border-radius:10px; display:block; user-select:none; }
+.labelmine-body .gh-deleteBtn,
+.labelmine-body .gh-downloadBtn{
+  position:absolute; top:10px; width:35px; height:35px; border:1px solid #e5e7eb; border-radius:var(--radius-xx); background:#fff;
+  display:grid; place-items:center; box-shadow:0 3px 3px rgba(0,0,0,0.05); cursor:pointer;
+  transition:opacity 140ms ease; opacity:0; pointer-events:none;
+}
+.labelmine-body .gh-deleteBtn{ left:10px; }
+.labelmine-body .gh-downloadBtn{ right:10px; }
+.labelmine-body .gh-dateBadge{
+  position:absolute; top:10px; left:50%; transform:translateX(-50%);
+  padding:6px 10px; background:#fff; font-size:11px; letter-spacing:.02em; color:#6b7280;
+  transition:opacity 140ms ease; pointer-events:none; opacity:0;
+}
+.labelmine-body .gh-card:hover .gh-deleteBtn,
+.labelmine-body .gh-card:hover .gh-downloadBtn,
+.labelmine-body .gh-card:hover .gh-dateBadge{ opacity:1; pointer-events:auto; }
+.labelmine-body .gh-card.isTouch .gh-deleteBtn,
+.labelmine-body .gh-card.isTouch .gh-downloadBtn,
+.labelmine-body .gh-card.isTouch .gh-dateBadge{ opacity:1; pointer-events:auto; }
+.labelmine-body .gh-empty{ flex:0 0 auto; padding:40px 20px; }
+.labelmine-body .gh-icon, .labelmine-body .gh-icon--trash{ display:block; width:18px; height:18px; }
+
+/* =====================================================================
+   8) RESPONSIVE (stage/tooling)
+===================================================================== */
+@media (max-width:1199px) and (min-width:625px){
+  .labelmine-body{ --STAGE-W:88vw; }
+  .labelmine-body .sdf-wrap{ height:520px; }
+}
+@media (max-width:624px){
+  .labelmine-body{ --STAGE-W:92vw; }
+  .labelmine-body .title{ font-size:30px; }
+  .labelmine-body .subtitle{ font-size:18px; }
+  .labelmine-body .sdf-wrap{ height:440px; }
+  .labelmine-body .sdf-toolbar{ bottom:10px; }
+  .labelmine-body .sdf-toolbar-inner{ width:240px; }
+  .labelmine-body .gh-thumb{ height:150px; }
+}
+
+/* =====================================================================
+   9) FEED COMPOSER (inline card)
+===================================================================== */
+.labelmine-body .feed-composer{
+  width:var(--STAGE-W); max-width:var(--STAGE-W);
+  background:#fff; border:1px solid #e5e7eb; border-radius:14px;
+  padding:14px; box-shadow:0 6px 14px rgba(0,0,0,.06); margin:8px auto 0;
+}
+.labelmine-body .feed-composer__row{ display:flex; gap:12px; align-items:flex-start; }
+.labelmine-body #fc-text{
+  flex:1; min-height:96px; resize:vertical; padding:12px; border-radius:10px; border:1px solid #e5e7eb;
+  font-size:14px; line-height:1.5; color:var(--text); background:#fff; outline:none;
+}
+.labelmine-body #fc-text::placeholder{ color:#9aa0a6; }
+.labelmine-body #fc-text:focus{ border-color:#cfd8e3; box-shadow:0 0 0 3px rgba(255,167,101,.18); }
+.labelmine-body .fc-actions{ display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; }
+.labelmine-body .file-pill{
+  display:inline-flex; align-items:center; gap:8px; border:1px dashed #cfd3d6; padding:8px 12px; border-radius:9999px; background:#fff; cursor:pointer; font-weight:600; color:#333;
+}
+.labelmine-body .file-pill .hint{ font-size:12px; color:#666; margin-left:6px; }
+.labelmine-body #fc-file{ display:none; }
+.labelmine-body .btn{ border-radius:9999px; border:1px solid #cfd3d6; background:#fff; padding:9px 14px; font-weight:600; cursor:pointer; }
+.labelmine-body .btn[disabled]{ opacity:.6; pointer-events:none; }
+.labelmine-body .btn-primary{ background:#2A5F5F; color:#fff; border:none; padding:10px 18px; }
+#feed-toast, .labelmine-body .feed-toast{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  background:#111; color:#fff; padding:10px 14px; border-radius:12px; font-size:13px;
+  opacity:0; pointer-events:none; transition:opacity .2s; z-index:9999;
+}
+#feed-toast.is-in, .labelmine-body .feed-toast.is-in{ opacity:1; }
+
+/* =====================================================================
+   10) FEED COMPOSER — Split layout (600 + 350)
+===================================================================== */
+.labelmine-body .feed-composer.feed-composer--split{ padding:16px; }
+.labelmine-body .feed-composer.feed-composer--split .fc-split{
+  display:grid; grid-template-columns:600px 350px; gap:16px 0; align-items:stretch; /* 총 950px */
+}
+.labelmine-body .feed-composer.feed-composer--split .fc-left,
+.labelmine-body .feed-composer.feed-composer--split .fc-right{ min-width:0; }
+.labelmine-body .feed-composer.feed-composer--split .fc-right{
+  box-sizing:border-box; display:grid; grid-auto-rows:max-content; gap:10px;
+  border-left:1px solid var(--split-border); padding-left:12px;
+}
+.labelmine-body .fc-preview{
+  width:100%; min-height:280px; border:1px solid #e5e7eb; border-radius:12px; background:#f8fafc;
+  display:grid; place-items:center; overflow:hidden;
+}
+.labelmine-body .fc-preview img{ max-width:100%; height:auto; display:block; }
+.labelmine-body .fc-placeholder{ color:#9aa0a6; font-size:13px; }
+.labelmine-body .feed-composer.feed-composer--split #fc-text{ min-height:220px; }
+.labelmine-body .feed-composer.feed-composer--split .fc-actions{ margin-top:12px; justify-content:flex-end; }
+
+/* =====================================================================
+   11) POST BUTTON & ACTION BAR
+===================================================================== */
+.labelmine-body .sdf-actionbar{
+  display:flex; justify-content:flex-end; align-items:center; gap:8px;
+  width:var(--STAGE-W) !important; margin:0 auto 10px !important; padding-right:0;
+}
+.labelmine-body .feed-open-btn{
+  width:86px; height:44px; padding:0 18px; border:1px solid #e5e7eb; border-radius:14px; background:#111; color:#fff; font-weight:700; letter-spacing:.02em;
+  cursor:pointer; box-shadow:0 8px 8px rgba(0,0,0,.18);
+  transition:transform .08s ease, box-shadow .16s ease, opacity .16s ease, background .16s ease; -webkit-tap-highlight-color:transparent;
+  transform:translateX(var(--post-nudge-x));
+}
+.labelmine-body .feed-open-btn:hover{ box-shadow:0 10px 22px rgba(0,0,0,.22); }
+.labelmine-body .feed-open-btn:active{ transform:translateX(var(--post-nudge-x)) translateY(1px); box-shadow:0 6px 14px rgba(0,0,0,.16); }
+.labelmine-body .feed-open-btn:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(0,0,0,.06), 0 0 0 6px rgba(255,167,101,.35); }
+
+/* =====================================================================
+   12) FEED MODAL — Compose (Step1: 950px 고정)
+===================================================================== */
+:is(.labelmine-body, body:has(.labelmine-body)) .imodal-backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,.45);
+  display:grid; place-items:center; z-index:3400;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .imodal{
+  width:950px; height:645px;
+  background:#fff; border-radius:25px; box-shadow:0 20px 60px rgba(0,0,0,.35);
+  display:grid; grid-template-rows:45px 1fr; overflow:hidden; isolation:isolate;
+}
+/* Header */
+:is(.labelmine-body, body:has(.labelmine-body)) .im-head{
+  position:relative; display:grid;
+  grid-template-columns:45px 1fr 45px; align-items:center;
+  border-bottom:1px solid #e5e7eb;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-head-title{
+  position:absolute; left:50%; transform:translateX(-50%); font-size:17px;
+  width:max-content; text-align:center; font-weight:700; letter-spacing:.01em;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-head-back{
+  width:45px; height:45px; display:grid; place-items:center;
+  border:0; background:transparent; cursor:pointer; position:relative; color:#111; grid-column:1/2;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-head-back::before{
+  content:""; width:40px; height:40px; display:block; background-color:currentColor;
+  -webkit-mask-image:var(--ico-arrow-left); mask-image:var(--ico-arrow-left);
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+  -webkit-mask-position:center; mask-position:center;
+  -webkit-mask-size:22px 22px; mask-size:22px 22px;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-head-back:focus-visible{
+  outline:none; box-shadow:0 0 0 3px rgba(0,0,0,.06); border-radius:9999px;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .feed-ico-back{ display:none !important; }
+/* Share */
+:is(.labelmine-body, body:has(.labelmine-body)) .im-head-share{
+  justify-self:end; margin-right:12px; font-size:15px;
+  background:transparent !important; color:#0095F6 !important;
+  border:0; border-radius:0; min-width:0; height:auto; padding:0 8px;
+  line-height:1; font-weight:500; cursor:pointer; grid-column:3/4;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-head-share[disabled]{ opacity:.45; cursor:default; }
+/* Body: 600 + 350 (= 950) */
+:is(.labelmine-body, body:has(.labelmine-body)) .im-body{
+  display:grid; grid-template-columns:600px 350px; gap:16px 0; min-height:0;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-left{
+  min-width:0; background:#fff; display:grid; place-items:center; transition:background .2s ease;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-stage{
+  position:relative; width:600px !important; max-width:600px !important;
+  height:100%; display:grid; place-items:center; background:#fff; margin:0 auto;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-stage img{
+  max-width:100%; max-height:100%; display:none; border-radius:12px; box-shadow:0 1px 0 rgba(0,0,0,0.04);
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-stage.has-image img{ display:block; }
+:is(.labelmine-body, body:has(.labelmine-body)) .im-right{
+  box-sizing:border-box; min-width:0; 
+  border-left:1px solid var(--split-border); padding:12px;
+  overflow:auto; display:grid; grid-auto-rows:max-content; gap:10px; background:#fff; -webkit-overflow-scrolling:touch;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-acct{ display:flex; align-items:center; gap:10px; }
+:is(.labelmine-body, body:has(.labelmine-body)) .im-acct-avatar{ width:32px; height:32px; border-radius:9999px; background:#e5e7eb; }
+:is(.labelmine-body, body:has(.labelmine-body)) .im-acct-name{ font-weight:600; }
+:is(.labelmine-body, body:has(.labelmine-body)) .im-caption{
+  box-sizing:border-box; width:100%; min-height:120px; resize:vertical; padding:12px 12px;
+  border:1px solid #e6e6e6; border-radius:10px; outline:none;
+  font:500 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+  color:var(--text); background:#fff;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .im-caption:focus{ box-shadow:var(--ring); border-color:transparent; }
+:is(.labelmine-body, body:has(.labelmine-body)) .im-cap-meta{ display:flex; align-items:center; justify-content:space-between; color:#9aa0a6; font-size:12px; }
+:is(.labelmine-body, body:has(.labelmine-body)) .im-attach{ display:flex; align-items:center; gap:8px; }
+:is(.labelmine-body, body:has(.labelmine-body)) .feedc__attach{
+  display:inline-flex; align-items:center; gap:8px; height:36px; padding:0 12px; border:1px solid #e5e7eb; border-radius:10px; cursor:pointer; background:#fff; color:#333; font-size:13px; font-weight:500;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .feedc__attach:hover{ background:#fafafa; }
+:is(.labelmine-body, body:has(.labelmine-body)) .feedc__attach:active{ background:#f5f5f5; }
+:is(.labelmine-body, body:has(.labelmine-body)) .feedc__file{
+  position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+/* =====================================================================
+   13) CROP MODAL (step 2) — 600px
+===================================================================== */
+:is(.labelmine-body, body:has(.labelmine-body)) .cmodal-backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,.45); display:grid; place-items:center; z-index:6500;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .cmodal{
+  width:600px; height:645px;
+  background:#fff; border-radius:25px; box-shadow:0 20px 60px rgba(0,0,0,.35);
+  display:grid; grid-template-rows:45px 1fr; overflow:hidden; isolation:isolate;
+}
+/* Header */
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-head{
+  display:grid; grid-template-columns:45px 1fr 45px; align-items:center;
+  border-bottom:1px solid #e5e7eb; position:relative;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-title{
+  position:absolute; left:50%; transform:translateX(-50%); font-size:17px;
+  width:max-content; text-align:center; font-weight:700; letter-spacing:.01em;
+}
+/* Back */
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-back{
+  width:45px; height:45px; display:grid; place-items:center; grid-column:1/2;
+  border:0; background:transparent; cursor:pointer; position:relative; color:#111;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-back::before{
+  content:""; width:40px; height:40px; display:block; background-color:currentColor;
+  -webkit-mask-image:var(--ico-arrow-left); mask-image:var(--ico-arrow-left);
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+  -webkit-mask-position:center; mask-position:center;
+  -webkit-mask-size:22px 22px; mask-size:22px 22px;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-back:focus-visible{
+  outline:none; box-shadow:0 0 0 3px rgba(0,0,0,.06); border-radius:9999px;
+}
+/* Next */
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-next{
+  justify-self:end; margin-right:12px; grid-column:3/4; font-size:15px;
+  background:transparent !important; color:#0095F6 !important;
+  border:0; border-radius:0; min-width:0; height:auto; padding:0 8px;
+  line-height:1; font-weight:500; cursor:pointer;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-next[disabled]{ opacity:.45; cursor:default; }
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-body{ background:#fff; display:grid; place-items:center; }
+/* 2단계 이미지 영역 — 600px 고정 */
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-stage{
+  width:600px !important; height:600px;
+  background:#fff; display:grid; place-items:center; margin:0 auto;
+}
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-stage img,
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-stage canvas{
+  max-width:100%; max-height:100%; display:block; background:#fff !important;
+}
+
+
+/* Step2(600px) → Step3(950px) 너비 모핑 */
+/* 데스크톱에서만 부드럽게, 모바일 폭(<=640px)은 기존처럼 즉시 전환 */
+@media (min-width: 641px){
+  :is(.labelmine-body, body:has(.labelmine-body)) .cmodal{
+    transition: width 280ms cubic-bezier(.2,.8,.2,1);
+    will-change: width;
+  }
+  :is(.labelmine-body, body:has(.labelmine-body)) .cmodal.is-grow-to-compose{
+    width: 950px; /* step3와 동일한 폭 */
+  }
+}
+
+/* 접근성: 모션 최소화 설정이면 애니메이션 제거 */
+@media (prefers-reduced-motion: reduce){
+  :is(.labelmine-body, body:has(.labelmine-body)) .cmodal{
+    transition: none !important;
+  }
+}

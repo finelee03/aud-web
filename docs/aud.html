@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="./config.js"></script>
+  <meta charset="UTF-8" />
+  <title>Label</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./css/aud.css" />
+</head>
+<body>
+  <!-- ===== Navigation ===== -->
+  <header class="nav">
+    <div class="nav-inner" role="navigation" aria-label="Primary">
+      <ul class="menu">
+        <li><a href="./home.html">HOME</a></li>
+        <li><a href="./collect.html">Collect</a></li>
+        <li><a href="./gallery.html">Gallery</a></li>
+        <li><a href="./custom.html">Custom</a></li>
+      </ul>
+      <div class="logo-cta">
+        <a href="./mine.html">
+          <img src="./asset/logo2.png" alt="logo">
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== Hero ===== -->
+  <section class="aud-page">
+    <div class="hero">
+      <!-- 카테고리 + 별(현재 UNKNOWN 고정) -->
+      <div id="categoryRow" class="category-row" aria-live="polite"></div>
+      <!-- 선택된 라벨명 -->
+      <h1 id="lastLabel" class="title" aria-live="polite"></h1>
+    </div>
+  </section>
+
+  <!-- ===== Body ===== -->
+  <section class="aud-body">
+    <div class="container">
+      <div id="audGalleryBox" class="aud-gallery-box"></div>
+      <button id="audToGalleryBtn" class="aud-btn" type="button">Collect this!</button>
+    </div>
+  </section>
+
+<script src="https://YOUR_RENDER_APP.onrender.com/socket.io/socket.io.js"></script>
+
+<!-- 1) 전역 인증 부팅 -->
+<script src="./js/auth-boot.js" defer></script>
+
+<!-- 4) 세션 keepalive -->
+<script src="./js/auth-keepalive.js" defer></script>
+
+<!-- 2) Store (module) -->
+<script type="module" src="./js/store.js"></script>
+
+<!-- 3) UI 라우팅 가드/로고 -->
+<script src="./js/logo-guard.js" defer></script>
+
+<!-- (페이지별 앱 스크립트들) -->
+<script type="module" src="./js/aud.js"></script>
+
+</body>
+</html>

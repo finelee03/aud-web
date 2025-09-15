@@ -1,0 +1,225 @@
+/* =====================================================================
+   0) Base
+===================================================================== */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --accent:#FFA765;
+  --nav-h:64px;
+  --text:#111;
+  --muted:#666;
+}
+
+html, body{
+  margin-bottom: 50px;
+}
+
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  color:var(--text);
+  background:#FFFFFF;
+  min-width: 475px;
+}
+
+/* =====================================================================
+   1) Navigation
+===================================================================== */
+header.nav {
+  position:sticky;
+  top:0;
+  z-index:100;
+  height:var(--nav-h);
+  background:#FFFFFF;
+  border-bottom:none;
+}
+.nav-inner {
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 27px;
+}
+.menu {
+  list-style:none;
+  display:flex;
+  gap:20px;
+}
+.menu a {
+  color:#333;
+  text-decoration:none;
+  font-weight:500;
+  font-size:15px;
+  letter-spacing:-.2px;
+  opacity:.9;
+  transition:opacity .2s,color .2s;
+}
+.menu a:hover {opacity:1; color:#000;}
+.menu a.active {font-weight:600; color:#000;}
+.logo-cta {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:27px;
+  height:27px;
+}
+.logo-cta img {
+  width:27px;
+  height:27px;
+  display:block;
+  object-fit:contain;
+}
+/* =====================================================================
+   2) Hero
+===================================================================== */
+.hero {
+  max-width:960px;
+  margin:0 auto;
+  text-align:center;
+  padding-top:60px;
+}
+.title {
+  margin:8px 0 0;
+  font-weight:600;
+  color:#111;
+  letter-spacing:-0.04em;
+  text-transform:uppercase;
+  line-height:1.1;
+  font-size:40px;
+}
+
+/* =====================================================================
+   3) Layout Helpers
+===================================================================== */
+
+.stack {
+  max-width:960px;
+  margin:0 auto;
+  text-align:center;
+  padding-top:20px;
+  display: flex;             /* 플렉스 컨테이너 */
+  flex-direction: column;    /* 세로 정렬 */
+  align-items: center;       /* 가운데 정렬 */
+  gap: 10px;                 /* 원하는 간격(px) */
+}
+
+.category-row {
+  display: inline-flex;          /* 내용 폭만큼만 */
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin: 8px 0 12px;
+}
+
+
+/* =====================================================================
+   4) Category / Pill
+===================================================================== */
+
+.pill {
+  display: inline-flex;
+  height: 29px;
+  align-items: center;
+  justify-content: center;
+  background: #F4F4F4;           /* 연한 회색 배경 */
+  border-radius: 8px;
+  padding: 0 8px;
+}
+
+.pill__text {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 400;
+  color: #666;                   /* 중간 회색 */
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  line-height: 1.6em;
+}
+
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: 29px;
+}
+
+.stars svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+}
+
+.stars svg path {
+  stroke: #666;
+  stroke-width: 1.3;
+  /* 채움 색은 TSX에서 filled 여부에 따라 설정됨 (none or #666) */
+}
+
+/* =====================================================================
+   5) Add Gallery
+===================================================================== */
+
+.add-body .container {
+  display: flex;
+  flex-direction: column;   /* 세로 방향 쌓기 */
+  align-items: center;      /* 가운데 정렬 */
+  justify-content: flex-start; /* 위에서부터 시작 */
+  gap: 30px;                /* 요소 사이 여백 (원하는 값으로 조정) */
+}
+
+.add-gallery-box {
+  width: 300px;
+  height: 300px;
+  background: transparent;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 공통 미디어 규칙 */
+.add-gallery-box img {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  object-fit: cover;
+  transform: scale(2.1);
+  transform-origin: center;
+}
+
+.add-gallery-box.is-empty {
+  border: 1px dashed #d9d9d9;
+  border-radius: 16px;
+}
+
+/* =====================================================================
+   6) Button
+===================================================================== */
+
+/* Add to Gallery 버튼 기본(= primary) */
+.add-btn{
+  width: fit-content;
+  height: 40px;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+
+  background-color: #EBEBEB; /* primary bg */
+  color: #000;
+  border: none;
+}
+
+/* hover (= variants.hover) */
+.add-btn:hover{
+  background-color: #FFFFFF99;
+  color: #000;
+  border: none;
+}
+
+/* pressed (= variants.pressed) */
+.add-btn:active{
+  background-color: #FFFFFF;
+  color: #000;
+  border: 1px solid #000;
+}

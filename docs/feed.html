@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <script src="./config.js"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Public Feed</title>
+  <link rel="stylesheet" href="/css/feed.css"/>
+</head>
+<body>
+  <main>
+    <h1>공개 피드</h1>
+    <!-- 서버에서 items 주입 or 클라이언트 fetch로 렌더 -->
+    <!-- 예시 카드 (SSR or CSR로 반복) -->
+    <article class="card">
+      <img src="/api/gallery/DEMO_ID/blob" alt="demo" width="320"/>
+      <footer>
+        <button class="btn-like" data-item-id="DEMO_ID">
+          <span class="icon">♥</span><span data-like-count>0</span>
+        </button>
+      </footer>
+    </article>
+
+    <!-- 실제로는 JS에서 /api/gallery/public 호출 후 카드들을 append 하세요 -->
+  </main>
+
+  <script src="/js/common-csrf.js"></script>
+  <script src="/js/feed-like.js"></script>
+</body>
+</html>
+ㄴ

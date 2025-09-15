@@ -1,0 +1,231 @@
+/* =========================================================
+   0) RESET & BASE
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root{
+  --accent:#FFA765;
+  --nav-h:64px;
+  --text:#ffffff;
+  --muted:#b0b0b0;
+  --home-bg:#275999;
+
+  /* motion */
+  --reveal-dur:1.5s;
+  --easing:cubic-bezier(.22,.61,.36,1);
+}
+
+html{ scroll-behavior:smooth; }
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  color:var(--text);
+  background:#fff;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  min-width:475px;          /* 474↓에서는 이 값 때문에 가로 스크롤 */
+  overflow-x:auto;
+}
+
+/* =========================================================
+   1) NAV (64px, sticky)
+   ========================================================= */
+header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background:var(--home-bg); }
+.nav-inner{ height:100%; display:flex; align-items:center; justify-content:space-between; padding:0 27px; }
+.menu{ list-style:none; display:flex; gap:20px; }
+.menu a{ color:#fff; text-decoration:none; font-weight:500; font-size:15px; letter-spacing:-.2px; opacity:.95; transition:opacity .2s; }
+.menu a:hover{ opacity:1; }
+.logo-cta{ display:inline-flex; align-items:center; justify-content:center; width:27px; height:27px; overflow:hidden; }
+.logo-cta img{ width:27px; height:27px; object-fit:contain; display:block; }
+
+/* =========================================================
+   2) HOME (배경 비디오 + 타이틀)
+   ========================================================= */
+.home{ position:relative; background:var(--home-bg); overflow:hidden; height:1000px; }
+@media (min-width:1200px){ .home{ height:1000px; } }
+@media (max-width:1199px){ .home{ height:950px; } }
+
+.home-canvas{ position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
+.home-video{
+  position:absolute; left:50%; top:56%; transform:translate(-50%,-50%);
+  width:1800px; height:900px; object-fit:cover; display:block; backface-visibility:hidden; will-change:transform;
+}
+@media (max-width:1199px){ .home-video{ width:1700px; height:800px; } }
+@media (prefers-reduced-motion:reduce){ .home-video{ display:none; } }
+
+/* Title */
+.title-box{
+  position:absolute; z-index:1; top:40px; left:0; right:0;
+  width:86%; min-width:475px; margin:0 auto; padding:0 0 0 35px; box-sizing:border-box;
+}
+.h0{ margin:0; font-weight:700; color:#fff !important; }
+.h0 .tone{ color:var(--accent) !important; }
+.sub{ color:var(--muted); font-weight:800; }
+.subRow{ display:inline-flex; align-items:center; gap:0; flex-wrap:wrap; }
+.audWordLink{ display:inline-flex; align-items:center; text-decoration:none; margin-left:5px; }
+.audWord{ color:#fff; font-weight:800; line-height:1; letter-spacing:-.7px; opacity:0; transform:translateX(-18px); display:inline-block; animation:audWordIn .6s ease-out forwards; }
+@keyframes audWordIn{ to{ opacity:1; transform:none; } }
+
+@media (min-width:1200px){
+  .h0{ font-size:72px; letter-spacing:-3px; line-height:1.2; }
+  .title-box .sub, .title-box .audWord{ font-size:24px; line-height:1; letter-spacing:-.7px; font-weight:1000; }
+}
+@media (max-width:1199px){
+  .h0{ font-size:62px; letter-spacing:-2px; line-height:1.1; }
+  .title-box .sub, .title-box .audWord{ font-size:21px !important; line-height:1 !important; letter-spacing:-.7px !important; font-weight:1000 !important; }
+}
+
+/* =========================================================
+   3) FEATURE (윗: 좌 미디어 / 우 텍스트)
+   ========================================================= */
+
+.gray-area{ background:#F5F5F5; padding:20px 0; }
+
+.feature{ background:#F5F5F5; padding:20px 0; }
+
+.feature .feature-inner{
+  /* 스펙 이미지: 카드 폭 75% (유동), 높이 450 유지 */
+  width:75%;
+  max-width:none;
+  min-width:475px;
+  margin:0 auto;
+
+  padding:0 0 0 0;               /* 좌 강조 패딩 유지 */
+  display:grid; grid-template-columns:400px 1fr; align-items:center;
+  column-gap:80px; min-height:450px;
+}
+
+/* 미디어 박스 */
+.fv-box, .rp-box{
+  width:400px; height:400px;
+  background:#E6E6E6; border-radius:18px; overflow:hidden; position:relative;
+}
+.fv-video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+
+/* 텍스트 */
+.ft-copy{ display:block; }
+.ft-title{ font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-weight:700; font-size:45px; line-height:1.2; color:#333; margin:0 0 20px; }
+.ft-desc{ font-size:24px; line-height:1.5; color:#888; margin:0 0 20px; }
+.btn-ghost{ display:inline-block; padding:12px 20px; border-radius:12px; font-family:'Inter',sans-serif; font-weight:700; font-size:16px; text-decoration:none; cursor:pointer; transition:all .2s; background:#EBEBEB; color:#333; border:none; }
+.btn-ghost:hover{ background:#fff; color:#111; }
+.btn-ghost:active{ background:#fff; color:#111; border:1px solid #111; }
+
+/* –1199: 세로 스택 */
+@media (max-width:1199px) and (min-width:565px){
+  .feature .feature-inner{ grid-template-columns:1fr; row-gap:24px; min-height:auto; justify-items:start; padding:0 0 0 2%;}
+  .fv-box, .rp-box{ width:360px; height:360px; margin:0; }
+  .ft-title{ font-size:38px; }
+  .ft-desc{ font-size:20px; }
+}
+@media (max-width:564px){
+  .feature .feature-inner{ grid-template-columns:1fr; row-gap:24px; min-height:auto; justify-items:start; padding:0 0 0 25px;}
+  .fv-box{ width:345px; height:345px; margin:0; }
+  .ft-title{ font-size:38px; }
+  .ft-desc{ font-size:20px; }
+}
+
+/* =========================================================
+   4) FEATURE REVERSE (아랫: 좌 텍스트 / 우 미디어)
+   ========================================================= */
+.feature--reverse .feature-inner{
+  /* 동일하게 카드 폭 75% (유동), 높이 450 유지 */
+  width:75%;
+  max-width:none;
+  min-width:475px;
+  margin:0 auto;
+  padding:0 0 0 0;            
+  display:grid; grid-template-columns:1fr 400px; align-items:center;
+  column-gap:80px; min-height:450px;
+}
+
+.rp-slot{ position:absolute; inset:0; display:grid; place-items:center; animation:rpIn .4s ease-out both; }
+@keyframes rpIn{ from{ opacity:0; transform:scale(.92) } to{ opacity:1; transform:scale(1) } }
+.rp-slot > img, .rp-slot > video{ width:100%; height:100%; object-fit:cover; display:block; border:0; border-radius:12px; }
+.ft-copy.align-right{ text-align:right; }
+.ft-copy.align-right .btn-ghost{ display:inline-block; }
+
+@media (max-width:1199px) and (min-width:565px){
+  .feature--reverse .feature-inner{ grid-template-columns:1fr; grid-template-areas:"media" "text"; row-gap:24px; justify-items:end; padding:0 25px 0 0; }
+  .feature--reverse .rp-box{ grid-area:media; width:360px; height:360px; margin:0; }
+  .feature--reverse .ft-copy{ grid-area:text; text-align:right; }
+}
+@media (max-width:564px){
+  .feature--reverse .feature-inner{ grid-template-columns:1fr; grid-template-areas:"media" "text"; row-gap:24px; justify-items:end; padding:0 25px 0 0;  }
+  .feature--reverse .rp-box{ grid-area:media; width:345px; height:345px; margin:0; }
+  .feature--reverse .ft-copy{ grid-area:text; text-align:right; }
+}
+
+/* =========================================================
+   5) SCROLL REVEAL
+   ========================================================= */
+.reveal{ opacity:0; transform:translateX(0); will-change:transform,opacity; transition:transform .8s cubic-bezier(.22,.61,.36,1), opacity .8s ease; }
+.reveal-left{ transform:translateX(-150px); }
+.reveal-right{ transform:translateX(150px); }
+.reveal.in{ opacity:1; transform:none; }
+.ft-copy.reveal > *{ opacity:0; transform:translateY(6px); transition:transform .6s ease, opacity .6s ease; }
+.ft-copy.reveal.in > *{ opacity:1; transform:none; }
+.ft-copy.reveal > *:nth-child(1){ transition-delay:.00s; }
+.ft-copy.reveal > *:nth-child(2){ transition-delay:.08s; }
+.ft-copy.reveal > *:nth-child(3){ transition-delay:.16s; }
+@media (prefers-reduced-motion:reduce){ .reveal, .ft-copy.reveal > *{ transition:none !important; transform:none !important; opacity:1 !important; } }
+
+/* =========================================================
+   6) ABOUT & FOOTER
+   ========================================================= */
+.about{ background:#F5F5F5; padding:56px 0 40px; }
+
+/* ⬇️ 윈도우의 80% */
+.about-inner{
+  width:95vw;    
+  max-width:1600px;             
+  margin:0 auto;
+  padding:0 25px 0 25px;
+  color:#333;
+}
+
+.about-title{
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  font-weight:600; font-size:24px; line-height:1.2; margin:0 0 12px; color:#111;
+}
+.about-body{
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  font-weight:500; font-size:16px; line-height:1.6; color:#444; width:100%; text-align:justify; text-align-last:left;
+}
+
+.footer-bar{ background:#F5F5F5; padding-bottom:50px; }
+
+/* ⬇️ 윈도우의 80% */
+.footer-inner{
+  width:95vw;     
+  max-width:1600px;            
+  margin:0 auto;
+  padding:0 25px 0 25px;
+  display:grid; grid-template-columns:1fr 1fr; align-items:center;
+  color:#555; font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-weight:500; font-size:14px;
+}
+.footer-left{ justify-self:start; }
+.footer-right{ justify-self:end; }
+
+/* =========================================================
+   8) HERO MICRO-MOTION & TOKENS
+   ========================================================= */
+.h0 .tone{ display:inline-block; will-change:transform,opacity; }
+.h0 .tone.slide-in-left{ animation:toneInLeft .7s cubic-bezier(.22,.61,.36,1) .15s both; }
+@keyframes toneInLeft{ from{ opacity:0; transform:translateX(-150px); } to{ opacity:1; transform:none; } }
+
+:root{
+  --reveal-dur:.7s;
+  --easing:cubic-bezier(.22,.61,.36,1);
+  --slide-dx:-42px;
+  --rise-dy:42px;
+}
+.ft-copy, .reveal-up{ will-change:transform,opacity; backface-visibility:hidden; transform:translateZ(0); }
+.ft-copy.is-ready{ visibility:visible; opacity:0; transform:translate3d(var(--slide-dx),0,0); }
+.reveal-up.is-ready{ visibility:visible; opacity:0; transform:translate3d(0,var(--rise-dy),0); }
+.ft-copy.animate{ animation:slideInX var(--reveal-dur) var(--easing) both; }
+.reveal-up.animate{ animation:riseInUp var(--reveal-dur) var(--easing) both; }
+@keyframes slideInX{ from{ opacity:0; transform:translate3d(var(--slide-dx),0,0); } to{ opacity:1; transform:none; } }
+@keyframes riseInUp{ from{ opacity:0; transform:translate3d(0,var(--rise-dy),0); } to{ opacity:1; transform:none; } }
+
+/* CSP-safe: moved from inline style */
+.ft-copy, .reveal-up { opacity:0; visibility:hidden; }
+@media (prefers-reduced-motion:reduce){ .ft-copy, .reveal-up { opacity:1; visibility:visible; } }

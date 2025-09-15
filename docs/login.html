@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <script src="./config.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Log in</title>
+
+  <!-- ✅ 단일 CSS -->
+  <link rel="stylesheet" href="./css/login.css" />
+
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <ul class="menu">
+        <li><a href="./home.html">HOME</a></li>
+        <li><a href="./collect.html">Collect</a></li>
+        <li><a href="./gallery.html">Gallery</a></li>
+        <li><a href="./custom.html">Custom</a></li>
+      </ul>
+      <div class="logo-cta">
+        <a href="./mine.html">
+          <img src="./asset/logo2.png" alt="logo" />
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="auth-card" aria-labelledby="page-title">
+    <h1 id="page-title" class="auth-title">Account</h1>
+
+    <div class="auth-switch" role="tablist" aria-label="로그인/회원가입 전환">
+      <button id="tab-login" class="auth-tab is-active" type="button"
+              role="tab" aria-controls="login" aria-selected="true" tabindex="0">Sign in</button>
+      <button id="tab-signup" class="auth-tab" type="button"
+              role="tab" aria-controls="signup" aria-selected="false" tabindex="-1">Sign up</button>
+    </div>
+
+    <!-- 로그인 -->
+    <form id="login" role="tabpanel" aria-labelledby="tab-login" novalidate>
+      <label for="email">e-mail</label>
+      <input id="email" type="email" name="email" required
+             autocomplete="username email" inputmode="email"
+             autocapitalize="off" spellcheck="false" class="input-lg"
+             aria-invalid="false" aria-describedby="err-email"/>
+      <p id="err-email" class="field-error" aria-live="polite"></p>
+
+      <label for="pw">password</label>
+      <input id="pw" type="password" name="password" minlength="8" required
+             autocomplete="current-password" enterkeyhint="go" class="input-lg"
+             aria-invalid="false" aria-describedby="err-pw"/>
+      <p id="err-pw" class="field-error" aria-live="polite"></p>
+
+      <button class="btn-primary" type="submit">Sign in</button>
+      <p id="login-error" class="form-error" aria-live="polite" aria-atomic="true"></p>
+    </form>
+
+    <!-- 회원가입 -->
+    <form id="signup" role="tabpanel" aria-labelledby="tab-signup" hidden novalidate>
+      <label for="su-email">e-mail</label>
+      <input id="su-email" type="email" name="email" required
+             autocomplete="username email" inputmode="email"
+             autocapitalize="off" spellcheck="false" class="input-lg"
+             aria-invalid="false" aria-describedby="err-su-email"/>
+      <p id="err-su-email" class="field-error" aria-live="polite"></p>
+
+      <label for="su-pw">password (more than 8 characters)</label>
+      <input id="su-pw" type="password" name="password" minlength="8" required
+             autocomplete="new-password" enterkeyhint="go" class="input-lg"
+             aria-invalid="false" aria-describedby="err-su-pw"/>
+      <p id="err-su-pw" class="field-error" aria-live="polite"></p>
+
+      <label for="su-pw2">verify password</label>
+      <input id="su-pw2" type="password" name="password2" minlength="8" required
+             autocomplete="new-password" enterkeyhint="go" class="input-lg"
+             aria-invalid="false" aria-describedby="err-su-pw2"/>
+      <p id="err-su-pw2" class="field-error" aria-live="polite"></p>
+
+      <button class="btn-primary" type="submit">Sign up</button>
+      <p id="signup-error" class="form-error" aria-live="polite" aria-atomic="true"></p>
+    </form>
+
+    <noscript>
+      <p class="form-error">이 페이지는 자바스크립트가 필요합니다. 브라우저 설정에서 스크립트를 허용해 주세요.</p>
+    </noscript>
+  </main>
+
+  <!-- 필요 시 소켓 -->
+<script src="https://YOUR_RENDER_APP.onrender.com/socket.io/socket.io.js"></script>
+
+<!-- 1) 전역 인증 부팅 -->
+<script src="./js/auth-boot.js" defer></script>
+
+<!-- 4) 세션 keepalive -->
+<script src="./js/auth-keepalive.js" defer></script>
+
+<!-- 2) Store (module) -->
+<script type="module" src="./js/store.js"></script>
+
+<!-- 3) UI 라우팅 가드/로고 -->
+<script src="./js/logo-guard.js" defer></script>
+
+<!-- (페이지별 앱 스크립트들) -->
+<script type="module" src="./js/login.js"></script>
+
+</body>
+</html>

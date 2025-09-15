@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <script src="./config.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>me · 마이페이지</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/me.css" />
+</head>
+<body>
+  <!-- ===== Navigation (기존 구조 유지) ===== -->
+  <header class="nav" role="banner">
+    <div class="nav-inner">
+      <ul class="menu" role="navigation" aria-label="주요 메뉴">
+        <li><a href="./home.html">HOME</a></li>
+        <li><a href="./collect.html">Collect</a></li>
+        <li><a href="./gallery.html">Gallery</a></li>
+        <li><a href="./custom.html">Custom</a></li>
+      </ul>
+      <div class="logo-cta">
+        <a href="./mine.html" aria-label="대시보드로 이동">
+          <img src="./asset/logo2.png" alt="aud 로고" />
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="me" tabindex="-1">
+    <!-- ===== Profile Hero ===== -->
+    <section class="profile-hero" aria-label="프로필 요약">
+      <div class="ph-left">
+        <img id="me-avatar" class="avatar" src="" alt="프로필 이미지" width="88" height="88" />
+        <div class="name-block">
+          <h1 id="me-name" class="display-name">audor(e)</h1>
+          <p id="me-email" class="email">—</p>
+          <div class="badge-line">
+            <span id="me-grade" class="grade-badge">audor(e)</span>
+          </div>
+        </div>
+      </div>
+      <div class="ph-right">
+        <button id="btn-edit" class="btn ghost" type="button" aria-label="프로필 편집">Edit</button>
+      </div>
+    </section>
+
+    <!-- ===== Vote Insights ===== -->
+    <section class="insights" aria-label="투표 인사이트">
+      <article class="panel kpi-box">
+        <div class="kpi-lg">
+          <b id="m-posts">0</b>
+          <span>My post</span>
+        </div>
+      </article>
+
+      <article class="panel kpi-box">
+        <div class="kpi-lg">
+          <b id="m-participated">0</b>
+          <span>Post participated in vote</span>
+        </div>
+      </article>
+
+      <article class="panel rate-box">
+        <h3>aud: match rate</h3>
+        <div class="rate">
+          <div class="bar" aria-hidden="true"><i id="m-rate-bar"></i></div>
+          <div class="num"><b id="m-rate">0%</b><span id="m-rate-detail">(0 / 0)</span></div>
+        </div>
+      </article>
+    </section>
+
+
+    <!-- ===== Quick Panels ===== -->
+    <section class="quick" aria-label="빠른 정보">
+      <article class="panel">
+        <h3>Collection</h3>
+        <div class="grid-3">
+          <div class="kpi"><b id="k-labels">0</b><span>aud:</span></div>
+          <div class="kpi"><b id="k-jibs">0</b><span>Jibbtiz</span></div>
+          <div class="kpi"><b id="k-posts">0</b><span>Post</span></div>
+        </div>
+      </article>
+
+      <article class="panel notify">
+        <h3 class="panel-title">알림</h3>
+
+        <!-- 우측 상단 고정 토글 -->
+        <label class="switch icon notify-toggle">
+          <input id="notify-toggle" type="checkbox" aria-label="알림 켜기/끄기" />
+          <i class="notify-icon" aria-hidden="true"></i>
+        </label>
+
+        <ul id="notify-list" class="notify-list"></ul>
+        <p id="notify-empty" class="notify-empty">아직 알림이 없습니다.</p>
+      </article>
+    </section>
+  </main>
+
+  <script src="./js/auth-boot.js" defer></script>
+  <script src="./js/logo-guard.js" defer></script>
+  <script src="https://YOUR_RENDER_APP.onrender.com/socket.io/socket.io.js" defer></script>
+  <script src="./js/me.js" type="module"></script>
+</body>
+</html>

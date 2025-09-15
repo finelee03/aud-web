@@ -1,0 +1,289 @@
+/* =====================================================================
+   0) Base
+===================================================================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --accent: #FFA765;
+  --nav-h: 64px;
+  --text: #111;
+  --muted: #666;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  min-width: 475px;
+  color: var(--text);
+  background: #F5F5F5;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+}
+
+/* =====================================================================
+   1) Navigation
+===================================================================== */
+header.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--nav-h);
+  background: #F5F5F5;
+  border-bottom: none;
+}
+
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 0 27px;
+}
+
+.menu {
+  display: flex;
+  gap: 20px;
+  list-style: none;
+}
+
+.menu a {
+  color: #333;
+  text-decoration: none;
+  letter-spacing: -.2px;
+  font-size: 15px;
+  font-weight: 500;
+  opacity:.9;
+  transition:opacity .2s,color .2s;
+}
+
+.menu a:hover {
+  color: #000;
+  opacity: 1;
+}
+
+.menu a.active {
+  color: #000;
+  font-weight: 600;
+}
+
+.logo-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+}
+
+.logo-cta img {
+  display: block;
+  width: 27px;
+  height: 27px;
+  object-fit: contain;
+}
+
+/* =====================================================================
+   2) Hero
+===================================================================== */
+.hero {
+  max-width: 960px;
+  margin: 0 auto;
+  padding-top: 80px;
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  color: #111;
+  letter-spacing: -2px;
+  font-weight: 700;
+}
+
+@media (min-width: 1200px) {
+  .title {
+    font-size: 72px;
+    line-height: 1.2;
+  }
+}
+
+@media (max-width: 1199px) {
+  .title {
+    font-size: 62px;
+    line-height: 1.1;
+  }
+}
+
+.subtitle {
+  margin-top: 5px;
+  color: #888;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+/* =====================================================================
+   2.1) Hero Animation
+===================================================================== */
+.gallery .hero {
+  opacity: 0;
+  transform: translateY(24px);
+  will-change: transform, opacity; /* why: hint for smoother entry */
+}
+
+.gallery .hero.is-in {
+  animation: heroUp 700ms cubic-bezier(0.22, 0.61, 0.36, 1) 60ms forwards;
+}
+
+@keyframes heroUp {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery .hero {
+    opacity: 1;
+    transform: none;
+  }
+  .gallery .hero.is-in {
+    animation: none; /* why: respect reduced-motion preference */
+  }
+}
+
+/* =====================================================================
+   3) Grid
+===================================================================== */
+.gallery-section {
+  padding-block: 12px 48px;
+}
+
+.container {
+  width: clamp(450px, 85vw, 1000px);
+  margin: 0 auto;
+}
+
+.gallery-grid {
+  display: grid;
+  align-items: start;
+  justify-content: center;
+  gap: 45px;
+  padding: 0;
+  min-width: 450px;
+}
+
+@media (min-width: 1100px) {
+  .gallery-grid {
+    grid-template-columns: repeat(3, 260px);
+    gap: 60px;
+    padding: 65px 10px 50px;
+  }
+  .tile {
+    width: 260px;
+    height: 253.5px;
+  }
+}
+
+@media (min-width: 625px) and (max-width: 1099px) {
+  .gallery-grid {
+    grid-template-columns: repeat(2, minmax(230px, 1fr));
+    gap: 45px;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 50px 10px 50px;
+  }
+  .tile {
+    width: 100%;
+    height: 230px;
+  }
+}
+
+@media (max-width: 624px) {
+  .gallery-grid {
+    grid-template-columns: minmax(200px, 1fr);
+    gap: 40px;
+    max-width: 900px;
+    padding: 25px 10px 50px;
+  }
+  .tile {
+    width: 100%;
+    height: 200px;
+  }
+}
+
+/* =====================================================================
+   4) Tile
+===================================================================== */
+.tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+
+  border: none;
+  outline: none;
+  appearance: none;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: transform 0.06s, box-shadow 0.12s, background 0.16s;
+}
+
+/* Hover labels */
+.tile.unregistered:hover::after {
+  content: "AUD";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.tile.registered:hover::after {
+  content: none;
+}
+
+/* =====================================================================
+   5) Tile Content
+===================================================================== */
+.tile__content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+.tile__content video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition:all .3s ease; /* why: smooth hover effects if added */
+}
+
+.tile.unregistered .tile__content::after {
+  content: "";
+  position: absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  border-radius: 16px;
+  backdrop-filter: blur(1.3px);
+  pointer-events: none;
+}

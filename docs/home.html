@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="./config.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>aud:silhouette — A collection of what you hear</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/home.css" />
+  <!-- home.html의 </head> 직전에 추가 -->
+
+</head>
+<body>
+
+  <!-- ======================
+       BLUE AREA (Hero/NAV)
+       ====================== -->
+  <div class="blue-area">
+    <!-- NAV -->
+    <header class="nav">
+      <div class="nav-inner">
+        <ul class="menu">
+          <li><a href="./home.html">HOME</a></li>
+          <li><a href="./collect.html">Collect</a></li>
+          <li><a href="./gallery.html">Gallery</a></li>
+          <li><a href="./custom.html">Custom</a></li>
+        </ul>
+        <div class="logo-cta">
+          <a href="./mine.html">
+            <img src="./asset/logo1.png" alt="logo">
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- HOME -->
+    <main id="top">
+      <section class="home">
+        <div class="home-canvas">
+          <video
+            class="home-video"
+            src="./asset/렌더다이.67.mp4"
+            autoplay muted playsinline preload="metadata">
+          </video>
+        </div>
+
+        <!-- 제목 -->
+        <div class="title-box">
+          <!-- 변경: .tone에 slide-in-left 추가 -->
+          <h1 class="h0">aud:<span class="tone slide-in-left">silhouette</span></h1>
+          <div class="subRow">
+            <p class="sub">A collection of what you hear :</p>
+            <a id="audWordLink" class="audWordLink" href="./aud.html">
+              <span id="audWord" class="audWord"></span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div> <!-- END .blue-area -->
+
+
+  <!-- ======================
+       GRAY AREA (Features / About / Footer)
+       ====================== -->
+  <div class="gray-area">
+    <!-- Feature 1 -->
+    <section class="feature">
+      <div class="feature-inner">
+        <div class="fv-box">
+          <video class="fv-video"
+                 src="./asset/렌더다이.98.mp4"
+                 autoplay muted loop playsinline preload="metadata"></video>
+        </div>
+
+        <div class="ft-copy align-left">
+          <h3 class="ft-title">In the palm<br/>of your hand</h3>
+          <p class="ft-desc">A size that can be easily played –<br/>with one hand!</p>
+          <a class="btn-ghost" href="./gallery.html">Learn More</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Feature 2 (reverse) -->
+    <section class="feature feature--reverse">
+      <div class="feature-inner">
+        <div class="ft-copy align-right">
+          <h3 class="ft-title">Open and,<br/>Surprise!</h3>
+          <p class="ft-desc">Pick only with hearing,<br/>check what's inside later</p>
+          <a class="btn-ghost" href="./collect.html">Let's collect!</a>
+        </div>
+        <div class="rp-box">
+          <div id="randomSlot" class="rp-slot"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section class="about" id="about">
+      <div class="about-inner reveal-up" data-reveal-group="about-footer">
+        <h3 class="about-title">About</h3>
+        <p class="about-body">
+          We design with the belief that listening can lead perception—shifting attention
+          from what is seen to what is felt through sound. Our products are made to be
+          held close, inviting personal connection and lasting meaning. In a world of
+          constant digital noise, we offer a return to the tangible, where calm and
+          clarity take form.
+        </p>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer-bar">
+      <div class="footer-inner reveal-up" data-reveal-group="about-footer">
+        <div class="footer-left">Designed by SNU in Seoul</div>
+        <div class="footer-right">aud:silhouette</div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 필요 시 소켓 -->
+<script src="https://YOUR_RENDER_APP.onrender.com/socket.io/socket.io.js"></script>
+
+<!-- 1) 전역 인증 부팅 -->
+<script src="./js/auth-boot.js" defer></script>
+
+<!-- 4) 세션 keepalive -->
+<script src="./js/auth-keepalive.js" defer></script>
+
+<!-- 2) Store (module) -->
+<script type="module" src="./js/store.js"></script>
+
+<script src="./js/socket-init.js" defer></script>
+
+<!-- 3) UI 라우팅 가드/로고 -->
+<script src="./js/logo-guard.js" defer></script>
+
+<!-- (페이지별 앱 스크립트들) -->
+<script type="module" src="./js/home.js"></script>
+
+</body>
+</html>
