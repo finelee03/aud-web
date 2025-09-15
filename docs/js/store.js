@@ -120,33 +120,30 @@ window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
 (function installAuthNSWatcher(){
   let last = typeof USER_NS !== "undefined" ? USER_NS : "default";
 
-  function migrateIfNeeded(){
+  function nsKeyFor(ns, base){ return `${base}:${ns}`; }
+  function migrateIfNeeded(fromNS = "default", toNS = USER_NS){
     try{
-      if (typeof USER_NS === "undefined" || USER_NS === "default") return;
-      const keys = [
-        typeof LABEL_COLLECTED_KEY !== "undefined" ? LABEL_COLLECTED_KEY : null,
-        typeof LABEL_TEMP_KEY !== "undefined" ? LABEL_TEMP_KEY : null,
-        typeof TIMESTAMPS_KEY !== "undefined" ? TIMESTAMPS_KEY : null,
-        typeof HEARTS_KEY !== "undefined" ? HEARTS_KEY : null,
-        typeof LABEL_SELECTED_KEY !== "undefined" ? LABEL_SELECTED_KEY : null,
-        typeof JIB_SELECTED_KEY !== "undefined" ? JIB_SELECTED_KEY : null,
-        typeof JIB_COLLECTED_KEY !== "undefined" ? JIB_COLLECTED_KEY : null
-      ].filter(Boolean);
-
-      const markKey = `__migrated:${USER_NS}`;
+      if (!toNS || toNS === "default") return; // 게스트→게스트는 패스
+      const markKey = `__migrated:${toNS}`;
       if (localStorage.getItem(markKey) === "1") return;
 
+      const bases = [
+        "collectedLabels","tempCollectedLabels","labelTimestamps","labelHearts",
+        "aud:selectedLabel","jib:selected","jib:collected"
+      ];
+
       let touched = false;
-      for(const k of keys){
-        const sv = sessionStorage.getItem(k);
-        const lv = localStorage.getItem(k);
-        if (sv && !lv){
-          try{ localStorage.setItem(k, sv); touched = true; }catch{}
-        }
+      for (const base of bases){
+        const fromK = nsKeyFor(fromNS, base);
+        const toK   = nsKeyFor(toNS,   base);
+        const sv = sessionStorage.getItem(fromK);
+        const lv = localStorage.getItem(toK);
+        if (sv && !lv){ try { localStorage.setItem(toK, sv); touched = true; } catch {} }
       }
+
       if (touched){
-        try{ localStorage.setItem(markKey, "1"); }catch{}
-        try { localStorage.setItem("guest:bus", JSON.stringify({ kind: "migrated", ns: USER_NS, t: Date.now() })); } catch {}
+        try { localStorage.setItem(markKey, "1"); } catch {}
+        try { localStorage.setItem("guest:bus", JSON.stringify({ kind: "migrated", ns: toNS, t: Date.now() })); } catch {}
         try { setTimeout(()=> localStorage.removeItem("guest:bus"), 0); } catch {}
       }
     } catch {}
@@ -163,10 +160,11 @@ window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
         return "default";
       })();
       if (next === last) return;
+      const from = last;
       USER_NS = next;
       window.__STORE_NS = USER_NS;
       recalcKeys();
-      migrateIfNeeded();
+      migrateIfNeeded(from, USER_NS);
       last = USER_NS;
       try { window.dispatchEvent(new CustomEvent("store:ns-changed", { detail: USER_NS })); } catch {}
     }catch{}
@@ -744,7 +742,7 @@ const labels = {
     try{
       S.removeItem(LABEL_COLLECTED_KEY);
       window.dispatchEvent(new Event(LABEL_COLLECTED_EVT));
-      lsSet(LABEL_SYNC_KEY, JSON.stringify({ type:"set", arr: [], t:Date.now() }));
+      emitSync(LABEL_SYNC_KEY, { type:"set", arr: [], t:Date.now() });
       scheduleServerSync();
     }catch{}
   },
@@ -1155,7 +1153,7 @@ const jib = {
     try{
       S.removeItem(JIB_COLLECTED_KEY);
       window.dispatchEvent(new Event(JIB_COLLECTED_EVT));
-      lsSet(JIB_SYNC_KEY, JSON.stringify({ type:"set", arr: [], t:Date.now() }));
+      emitSync(JIB_SYNC_KEY, { type:"set", arr: [], t:Date.now() });
       scheduleServerSync();
     }catch{}
   },
@@ -1247,9 +1245,15 @@ window.__SERVER_GALLERY_SYNC_ON = SERVER_GALLERY_SYNC_ON;
     __logoutBeaconSent = true;
     try {
       const blob = new Blob([JSON.stringify({})], { type: "application/json" });
-      navigator.sendBeacon("/auth/logout-beacon", blob);
+      const target = (window.API_ORIGIN)
+        ? new URL("/auth/logout-beacon", window.API_ORIGIN).toString()
+        : "/auth/logout-beacon";
+      navigator.sendBeacon(target, blob);
     } catch {
-      fetch("/auth/logout-beacon", { method: "POST", keepalive: true, credentials: "include" });
+      const target = (window.API_ORIGIN)
+        ? new URL("/auth/logout-beacon", window.API_ORIGIN).toString()
+        : "/auth/logout-beacon";
+      fetch(target, { method: "POST", keepalive: true, credentials: "include" });
     }
   }
 

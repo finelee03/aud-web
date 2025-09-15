@@ -2,6 +2,18 @@
 (() => {
   "use strict";
 
+  // /auth, /api 요청은 백엔드 오리진으로 라우팅
+  const API_ORIGIN = window.PROD_BACKEND || window.API_BASE || null;
+  const toAPI = (p) => {
+    try {
+      const u = new URL(p, location.href);
+      if (API_ORIGIN && /^\/(?:auth|api)\//.test(u.pathname)) {
+        return new URL(u.pathname + u.search + u.hash, API_ORIGIN).toString();
+      }
+      return u.toString();
+    } catch { return p; }
+  };
+
   // 중복 로드 방지
   if (window.__authKeepaliveLoaded) return;
   window.__authKeepaliveLoaded = true;
@@ -26,7 +38,7 @@
   const pageActive = () => !document.hidden;
 
   const makeURL = (trigger) =>
-    `/auth/ping?src=${encodeURIComponent(trigger)}&t=${Date.now()}`;
+    toAPI(`/auth/ping?src=${encodeURIComponent(trigger)}&t=${Date.now()}`);
 
   // pingOnce 교체
   async function pingOnce(trigger = "interval") {
@@ -126,7 +138,15 @@
   schedule(); // 타이머는 항상
   (async function bootProbe(){
     try {
-      const res = await fetch("/auth/me", { method:"GET", credentials:"include", cache:"no-store" });
+        const res = await fetch(
+          toAPI("/auth/me"),
+          {
+            method: "GET",
+            credentials: API_ORIGIN ? "include" : "omit",
+            cache: "no-store",
+            mode: API_ORIGIN ? "cors" : "no-cors"
+          }
+        );
       if (res && res.ok) {
         const j = await res.json().catch(()=>null);
         if (j && j.authenticated === true) {

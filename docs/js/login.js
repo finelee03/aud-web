@@ -18,6 +18,17 @@
     a.logout        = a.logout        || (() => {});
   })();
 
+  // --- Backend router (GH Pages-safe) ---
+  const API_ORIGIN = window.PROD_BACKEND || window.API_BASE || null;
+  function toAPI(p) {
+    try {
+      const u = new URL(p, location.href);
+      return (API_ORIGIN && /^\/(?:auth|api)\//.test(u.pathname))
+        ? new URL(u.pathname + u.search + u.hash, API_ORIGIN).toString()
+        : u.toString();
+    } catch { return p; }
+  }
+
   const $  = (s, r=document) => r.querySelector(s);
   const on = (el, ev, fn, opt) => el && el.addEventListener(ev, fn, opt);
 
@@ -79,7 +90,7 @@
       if (!force && this._cache) return this._cache;
       try { const t = await window.auth.getCSRF(true); if (t) return (this._cache = t); } catch {}
       try {
-        const j = await fetch("/auth/csrf", { credentials: "include" }).then(r => r.json());
+        const j = await fetch(toAPI("/auth/csrf"), { credentials: "include" }).then(r => r.json());
         return (this._cache = j?.csrfToken || null);
       } catch { return null; }
     },
@@ -100,7 +111,7 @@
     const payload = { ...(body||{}) };
     if (t && payload._csrf == null) payload._csrf = t;
 
-    const res = await fetch(u.toString(), {
+    const res = await fetch(toAPI(u.toString()), {
       method: "POST",
       credentials: "include",
       headers,
@@ -120,14 +131,18 @@
    * ============================================================= */
   function resolveNextUrl(){
     const u = new URL(location.href);
-    const n = u.searchParams.get("next");
-    const allow = [
-      /^\/mine\.html$/,
-      /^\/home\.html$/, /^\/collect\.html$/, /^\/gallery\.html$/,
-      /^\/labelmine\.html(\?.*)?$/,
-    ];
-    const safe = (p) => typeof p === "string" && allow.some(rx => rx.test(p));
-    return safe(n) ? n : MINE_PATH;
+    const n = u.searchParams.get("next") || "";
+    // allow: same-origin & /.../(mine|home|collect|gallery|labelmine).html
+    try {
+      const t = new URL(n, location.href);       // relative or absolute both OK
+      if (t.origin === location.origin) {
+        const p = t.pathname;
+        if (/\/(mine|home|collect|gallery|labelmine)\.html$/i.test(p)) {
+          return p + t.search + t.hash;          // keep subpath (/aud-web/...)
+        }
+      }
+    } catch {}
+    return MINE_PATH;                             // fallback: ./mine.html
   }
   function gotoNext(){ markNavigate(); location.assign(resolveNextUrl()); }
 
@@ -231,7 +246,10 @@
         // Sync /auth/me (best-effort) and flush store snapshot if provided
         let uid = null, eml = email;
         try {
-          const me = await fetch("/auth/me", { credentials:"include", cache:"no-store" }).then(r => r.json());
+          const me = await (window.auth?.apiFetch
+            ? window.auth.apiFetch("/auth/me", { credentials:"include", cache:"no-store" })
+            : fetch(toAPI("/auth/me"), { credentials:"include", cache:"no-store" })
+          ).then(r => (r.json ? r.json() : r));
           if (me?.authenticated && me?.user?.id != null) uid = me.user.id;
           if (me?.user?.email) eml = me.user.email;
           try { await window.__flushStoreSnapshot?.({ server:true }); } catch {}
@@ -389,7 +407,10 @@
 
     // Debug helpers for console
     window.__loginDbg = {
-      async ping(){ return fetch("/auth/me", { credentials:"include" }).then(r => r.json()); },
+      async ping(){ return (window.auth?.apiFetch
+        ? window.auth.apiFetch("/auth/me", { credentials:"include" })
+        : fetch(toAPI("/auth/me"), { credentials:"include" })
+      ).then(r => (r.json ? r.json() : r)); },
       async csrf(){ return csrf.ensure(true); },
       gotoNext, activateTab
     };
