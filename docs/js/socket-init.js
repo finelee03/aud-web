@@ -105,7 +105,7 @@
       if (!subscribed.size) return;
       const arr = Array.from(subscribed);
       subscribed.clear();
-      try { sock.emit("unsubscribe", { labels: arr }); } catch {}
+      <script src="https://aud-api-dtd1onrender.com/socket.io/socket.io.js"></script>
     };
 
     // ---- 필요하다면 탭 종료 시 연결 정리 ----
