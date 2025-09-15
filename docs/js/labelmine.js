@@ -429,7 +429,7 @@ ensureReady(() => whenStoreReady(async () => {
   const me = await (window.auth?.getUser?.().catch(() => null));
   if (!me) {
     const ret = encodeURIComponent(location.href);
-    location.replace(`/login.html?next=${ret}`);
+    location.replace(`${pageHref('login.html')}?next=${ret}`);
     return;
   }
   syncAll();
@@ -1067,7 +1067,7 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       const me = await (window.auth?.getUser?.().catch(() => null));
       if (!me) {
         const ret = encodeURIComponent(location.href);
-        location.replace(`/login.html?next=${ret}`);
+        location.replace(`${pageHref('login.html')}?next=${ret}`);
         return;
       }onSaveToGallery();
       });
@@ -1955,7 +1955,7 @@ function goMineAfterShare(label = getLabel()) {
       const me = await (window.auth?.getUser?.().catch(()=>null));
       if (!me){
         const ret = encodeURIComponent(location.href);
-        location.replace(`/login.html?next=${ret}`);
+        location.replace(`${pageHref('login.html')}?next=${ret}`);
         return false;
       }
       return true;
@@ -2740,5 +2740,5 @@ function goMineAfterShare(label = getLabel()) {
 // 만료(401) 즉시 전환
 window.addEventListener("auth:logout", ()=>{
   const ret = encodeURIComponent(location.href);
-  location.replace(`/login.html?next=${ret}`);
+  location.replace(`${pageHref('login.html')}?next=${ret}`);
 });

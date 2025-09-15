@@ -1372,7 +1372,7 @@
     } else {
       const next = encodeURIComponent(location.href);
       // try { window.auth?.markNavigate?.(); } catch {}
-      location.replace(`../login.html?next=${next}`);
+      location.replace(`${pageHref('login.html')}?next=${next}`);
       return;
     }
   }
