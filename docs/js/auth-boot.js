@@ -27,6 +27,18 @@
 
   const now = () => Date.now();
 
+  // GH Pages(정적 호스트)에서 /auth, /api 요청을 실제 백엔드로 보냄
+  const API_ORIGIN = window.PROD_BACKEND || window.API_BASE || null;
+  function toAPI(p) {
+    try {
+      const u = new URL(p, location.href);
+      if (API_ORIGIN && /^\/(?:auth|api)\//.test(u.pathname)) {
+        return new URL(u.pathname + u.search + u.hash, API_ORIGIN).toString();
+      }
+      return u.toString();
+    } catch { return p; }
+  }
+
   try {
     window.COLLECTED_EVT     = "collectedLabels:changed";
     window.JIB_COLLECTED_EVT = "jib:collection-changed";
@@ -40,8 +52,9 @@
       if (t - __lastNavPing > 2000) {            // 2s throttle
         __lastNavPing = t;
         const blob = new Blob([JSON.stringify({ t })], { type: "application/json" });
-        navigator.sendBeacon?.("/auth/nav", blob) ||
-          fetch("/auth/nav", {
+        const navURL = toAPI("/auth/nav");
+        navigator.sendBeacon?.(navURL, blob) ||
+          fetch(navURL, {
             method: "POST", credentials: "include", keepalive: true,
             headers: { "content-type": "application/json" }, body: "{}"
           }).catch(()=>{});
@@ -188,9 +201,10 @@
     try {
       const blob = new Blob([JSON.stringify({ reason:"tab-close", t: Date.now() })],
                             { type: "application/json" });
-      const ok = navigator.sendBeacon?.("/auth/logout-beacon", blob);
+      const url = toAPI("/auth/logout-beacon");
+      const ok = navigator.sendBeacon?.(url, blob);
       if (!ok) {
-        fetch("/auth/logout-beacon", {
+        fetch(url, {
           method: "POST",
           credentials: "include",
           keepalive: true,
@@ -224,11 +238,11 @@
               [JSON.stringify({ reason: "tab-close", t: Date.now() })],
               { type: "application/json" }
             );
-            const ok = navigator.sendBeacon?.("/auth/logout-beacon", blob);
+            const ok = navigator.sendBeacon?.(toAPI("/auth/logout-beacon"), blob);
             if (!ok) throw new Error("beacon-failed");
           } catch {
             try {
-              fetch("/auth/logout-beacon", {
+              fetch(toAPI("/auth/logout-beacon"), {
                 method: "POST",
                 keepalive: true,
                 credentials: "include",
@@ -339,7 +353,7 @@
   async function getCSRF(force=false){
     if (state.csrf && !force) return state.csrf;
     if (csrfInFlight && !force) return csrfInFlight;
-    csrfInFlight = fetch("/auth/csrf", { credentials:"include", headers: { "Accept":"application/json" } })
+    csrfInFlight = fetch(toAPI("/auth/csrf"), { credentials:"include", headers: { "Accept":"application/json" } })
       .then(r => { if(!r.ok) throw new Error("csrf-fetch-failed"); return r.json(); })
       .then(j => (state.csrf = j?.csrfToken || null))
       .finally(() => { csrfInFlight = null; });
@@ -424,6 +438,7 @@
     }
 
     const req = { ...opt, method, credentials: "include", headers };
+    path = toAPI(path);
     path = coerceToSameOrigin(path);
     let res = await fetch(path, req);
 
@@ -464,7 +479,7 @@
         } else {
           let trulyExpired = false;
           try {
-            const chk = await fetch("/auth/me", { credentials:"include", cache:"no-store", headers: { "Accept":"application/json" }});
+            const chk = await fetch(toAPI("/auth/me"), { credentials:"include", cache:"no-store", headers: { "Accept":"application/json" }});
             if (!chk || chk.status !== 200) trulyExpired = true;
             else {
               const jj = await chk.clone().json().catch(()=>null);
@@ -489,7 +504,7 @@
    * ========================= */
   async function refreshMe(){
     try {
-      const r = await fetch("/auth/me", { credentials:"include", headers:{ "Accept":"application/json" }});
+      const r = await fetch(toAPI("/auth/me"), { credentials:"include", headers:{ "Accept":"application/json" }});
       const j = await r.json().catch(()=>null);
       state.authed = !!j?.authenticated;
       state.user   = state.authed ? (j.user || null) : null;
@@ -616,7 +631,7 @@
    * Optional tiny state API
    * ========================= */
   async function loadState(ns="default"){
-    const u = `/api/state?ns=${encodeURIComponent(ns)}`;
+    const u = toAPI(`/api/state?ns=${encodeURIComponent(ns)}`);
     const j = await fetch(u, { credentials:"include", headers:{ "Accept":"application/json" }}).then(r=>r.json()).catch(()=> ({}));
     return j?.state || {};
   }
@@ -642,7 +657,7 @@
     },
     getUser, login, signup, logout,
     getCSRF, getCSRFTokenSync,
-    ping: async () => { try { await fetch("/auth/ping", { credentials:"include" }); } catch {} },
+    ping: async () => { try { await fetch(toAPI("/auth/ping"), { credentials:"include" }); } catch {} },
     loadState, saveState,
     markNavigate,
   };
@@ -674,7 +689,7 @@
 
     let stillAuthed = false;
     try {
-      const me = await fetch("/auth/me", {
+      const me = await fetch(toAPI("/auth/me"), {
         credentials: "include", cache: "no-store", headers: { "Accept": "application/json" }
       }).then(r => r.json());
       stillAuthed = !!me?.authenticated;

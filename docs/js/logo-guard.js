@@ -2,6 +2,18 @@
 (() => {
   "use strict";
 
+  // --- API 라우터: /auth/*, /api/* 는 PROD_BACKEND로 보냄 ---
+  const API_ORIGIN = window.PROD_BACKEND || window.API_BASE || null;
+  const toAPI = (p) => {
+    try {
+      const u = new URL(p, location.href);
+      if (API_ORIGIN && /^\/(?:auth|api)\//.test(u.pathname)) {
+        return new URL(u.pathname + u.search + u.hash, API_ORIGIN).toString();
+      }
+      return u.toString();
+    } catch { return p; }
+  };
+
   const SELECTOR_LIST = [
     "#site-logo", "#logo",
     ".logo", ".logo a",
@@ -31,17 +43,19 @@
         [JSON.stringify({ t: Date.now(), path: location.pathname })],
         { type: "application/json" }
       );
-      if (navigator.sendBeacon && navigator.sendBeacon("/auth/nav", blob)) return;
+      if (navigator.sendBeacon && navigator.sendBeacon(toAPI("/auth/nav"), blob)) return;if (navigator.sendBeacon && navigator.sendBeacon("/auth/nav", blob)) return;
     } catch {}
 
     try {
-      // 콘솔 에러/프리플라이트 회피
-      fetch("/auth/nav", {
+      const useNoCors = !API_ORIGIN; // 백엔드 없으면 GH Pages라 404 숨기기용
+      fetch(toAPI("/auth/nav"), {
         method: "POST",
         keepalive: true,
-        mode: "no-cors",
-        headers: { "content-type": "text/plain" },
-        body: ""
+        mode: useNoCors ? "no-cors" : "cors",
+        credentials: useNoCors ? "omit" : "include",
+        headers: useNoCors ? { "content-type": "text/plain" }
+                            : { "content-type": "application/json" },
+        body: useNoCors ? "" : "{}"
       }).catch(() => {});
     } catch {}
   }
@@ -49,6 +63,7 @@
   // location.assign/replace 패치: 모든 내부 이동에 네비 마크 남김
   (function hookLocation() {
     try {
+      if (Location.prototype && Location.prototype.__audPatchedNav) return;
       const patch = (fn) => {
         const orig = location[fn].bind(location);
         location[fn] = function (href) {
@@ -120,4 +135,6 @@
   (document.readyState === "loading")
     ? document.addEventListener("DOMContentLoaded", boot, { once: true })
     : boot();
+
+  try { window.dispatchEvent(new Event("logo-guard:ready")); } catch {}
 })();
