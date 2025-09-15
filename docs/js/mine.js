@@ -121,7 +121,7 @@
             try {
               const ret = encodeURIComponent(location.href);
               window.auth?.markNavigate?.();
-              location.replace(`/login.html?next=${ret}`);
+              location.replace(`../login.html?next=${ret}`);
             } catch {}
           }
         }
@@ -2208,7 +2208,7 @@ const LikeCache = (() => {
         clearAuthedFlag(); // 서버 판단을 신뢰: stale flag 제거
         const ret = encodeURIComponent(location.href);
         try { window.auth?.markNavigate?.(); } catch {}
-        location.replace(`/login.html?next=${ret}`);
+        location.replace(`../login.html?next=${ret}`);
         return;
       }
 
@@ -2748,8 +2748,8 @@ const LikeCache = (() => {
 
       await __safeBeaconLogout();
       try { window.auth?.markNavigate?.(); } catch {}
-      const next = encodeURIComponent("/login.html");
-      location.assign(`/login.html?next=${next}`);
+      const next = encodeURIComponent("../login.html");
+      location.assign(`../login.html?next=${next}`);
     }, { capture: false });
 
     btn.addEventListener("keydown", (ev) => {
@@ -2791,7 +2791,7 @@ const LikeCache = (() => {
         location.assign(target);
       } else {
         const next = encodeURIComponent(target);
-        location.assign(`/login.html?next=${next}`);
+        location.assign(`../login.html?next=${next}`);
       }
     };
 
