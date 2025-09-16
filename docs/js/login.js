@@ -115,9 +115,6 @@
     const t = await csrf.ensure(true);
     const headers = new Headers({ "Content-Type": "application/json", "Accept": "application/json" });
     if (t) {
-      headers.set("CSRF-Token", t);
-      headers.set("X-CSRF-Token", t);
-      headers.set("X-XSRF-Token", t);
     }
     const u = new URL(url, location.href);
     if (t && !u.searchParams.has("_csrf")) u.searchParams.set("_csrf", t);
