@@ -168,7 +168,7 @@ header.nav {
 }
 
 .container {
-  width: clamp(450px, 85vw, 1000px);
+  width: clamp(350px, 85vw, 1000px);
   margin: 0 auto;
 }
 
@@ -178,7 +178,7 @@ header.nav {
   justify-content: center;
   gap: 45px;
   padding: 0;
-  min-width: 450px;
+  min-width: 350px;
 }
 
 @media (min-width: 1100px) {

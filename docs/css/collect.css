@@ -233,7 +233,7 @@ header.nav {
 
 /* ===== How it works carousel ===== */
 .how-carousel {
-  width: 400px;
+  width: 350px;
   height: 240px;
   margin: 14px auto 10px;
   overflow: hidden;
@@ -246,8 +246,8 @@ header.nav {
   transition: transform 600ms ease-in-out;
 }
 .how-cell {
-  flex: 0 0 400px;
-  width: 400px;
+  flex: 0 0 350px;
+  width: 350px;
   height: 200px;
   display: grid;
   place-items: center;
