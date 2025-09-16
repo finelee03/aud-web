@@ -129,13 +129,13 @@ header.nav {
 /* =====================================================================
    2.1) Hero Animation
 ===================================================================== */
-.gallery .hero {
+.custom .hero {
   opacity: 0;
   transform: translateY(24px);
   will-change: transform, opacity; /* why: hint for smoother entry */
 }
 
-.gallery .hero.is-in {
+.custom .hero.is-in {
   animation: heroUp 700ms cubic-bezier(0.22, 0.61, 0.36, 1) 60ms forwards;
 }
 
@@ -151,11 +151,11 @@ header.nav {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gallery .hero {
+  .custom .hero {
     opacity: 1;
     transform: none;
   }
-  .gallery .hero.is-in {
+  .custom .hero.is-in {
     animation: none; /* why: respect reduced-motion preference */
   }
 }
