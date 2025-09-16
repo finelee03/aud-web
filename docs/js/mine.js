@@ -155,7 +155,6 @@
     const t = await ensureCSRF();
     const headers = new Headers(opt.headers || {});
     if (t) {
-      headers.set("x-csrf-token", t);      // express/csurf 등
       headers.set("X-CSRF-Token", t);      // 일부 프레임워크는 대소문자 다룸
       headers.set("X-XSRF-TOKEN", t);      // Angular 스타일
     }
