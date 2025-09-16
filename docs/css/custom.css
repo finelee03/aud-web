@@ -23,11 +23,12 @@ body {
   min-width: 400px;
   color: var(--text);
   background: #F5F5F5;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
 }
 
 /* =====================================================================
-   1) Nav
+   1) Navigation
 ===================================================================== */
 header.nav {
   position: sticky;
@@ -35,13 +36,14 @@ header.nav {
   z-index: 100;
   height: var(--nav-h);
   background: #F5F5F5;
+  border-bottom: none;
 }
 
 .nav-inner {
-  height: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: 100%;
   padding: 0 27px;
 }
 
@@ -52,12 +54,13 @@ header.nav {
 }
 
 .menu a {
-  font-size: 15px;
-  font-weight: 500;
   color: #333;
   text-decoration: none;
-  opacity: 0.9;
-  transition: 0.2s;
+  letter-spacing: -.2px;
+  font-size: 15px;
+  font-weight: 500;
+  opacity:.9;
+  transition:opacity .2s,color .2s;
 }
 
 .menu a:hover {
@@ -70,7 +73,16 @@ header.nav {
   font-weight: 600;
 }
 
+.logo-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+}
+
 .logo-cta img {
+  display: block;
   width: 27px;
   height: 27px;
   object-fit: contain;
@@ -110,21 +122,21 @@ header.nav {
 .subtitle {
   margin-top: 5px;
   color: #888;
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 400;
 }
 
 /* =====================================================================
-   3) Hero Animation
+   2.1) Hero Animation
 ===================================================================== */
-.custom .hero {
+.gallery .hero {
   opacity: 0;
   transform: translateY(24px);
-  will-change: transform, opacity; /* why: hint GPU for smoother entry */
+  will-change: transform, opacity; /* why: hint for smoother entry */
 }
 
-.custom .hero.is-in {
-  animation: heroUp 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) 60ms forwards;
+.gallery .hero.is-in {
+  animation: heroUp 700ms cubic-bezier(0.22, 0.61, 0.36, 1) 60ms forwards;
 }
 
 @keyframes heroUp {
@@ -138,6 +150,15 @@ header.nav {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .gallery .hero {
+    opacity: 1;
+    transform: none;
+  }
+  .gallery .hero.is-in {
+    animation: none; /* why: respect reduced-motion preference */
+  }
+}
 /* =====================================================================
    4) Grid
 ===================================================================== */
