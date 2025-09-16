@@ -55,7 +55,7 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
 /* Title */
 .title-box{
   position:absolute; z-index:1; top:40px; left:0; right:0;
-  width:75%; min-width:300px; margin:0 auto; padding:0 0 0 35px; box-sizing:border-box;
+  width:75%; min-width:325px; margin:0 auto; padding:0 0 0 35px; box-sizing:border-box;
 }
 .h0{ margin:0; font-weight:700; color:#fff !important; }
 .h0 .tone{ color:var(--accent) !important; }
