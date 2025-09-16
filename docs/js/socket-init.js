@@ -8,7 +8,7 @@
 
   // 선택: 쿠키 인증 소켓이면 true 로 전역 세팅 (서버 CORS-credentials 허용 필요)
   const SOCK_WITH_CREDENTIALS =
-    typeof window.SOCK_WITH_CREDENTIALS === "boolean" ? window.SOCK_WITH_CREDENTIALS : false;
+    typeof window.SOCK_WITH_CREDENTIALS === "boolean" ? window.SOCK_WITH_CREDENTIALS : true;
 
   // ---- small helpers ----
   function onReady(fn) {
@@ -105,6 +105,11 @@
       if (!subscribed.size) return;
       const arr = Array.from(subscribed);
       subscribed.clear();
+      try {
+        sock.emit("unsubscribe", { labels: arr }, (ack) => {
+          if (ack && ack.ok === false) console.warn("[socket-init] unsubscribeAll failed", ack);
+        });
+      } catch {}
     };
 
     // ---- 필요하다면 탭 종료 시 연결 정리 ----

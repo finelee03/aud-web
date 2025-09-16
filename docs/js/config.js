@@ -7,6 +7,13 @@
   window.PROD_BACKEND = API;
   window.API_BASE = API;
 
+  // 레거시/유틸: API 경로 만들기
+  window.toAPI = function toAPI(path = "/") {
+    const p = String(path || "/");
+    // 절대 URL이면 그대로, 아니면 API 기준으로
+    try { return new URL(p, API); } catch { return new URL("/", API); }
+  };
+
   const _fetch = window.fetch.bind(window);
 
   // /auth/... 또는 /api/... 가 "어디에 있든" 잡아낸다. (예: /aud-web/auth/me)
@@ -38,7 +45,7 @@
     };
     if (!/^get|head$/i.test(method)) {
       // body는 init 우선, 없으면 원본 Request의 body 복제
-      outInit.body = init?.body ?? baseReq.body ?? null;
+      outInit.body = init?.body ?? baseReq.clone().body ?? null;
     }
     return new Request(targetURL, outInit);
   }
