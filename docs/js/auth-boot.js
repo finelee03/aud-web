@@ -310,7 +310,7 @@
           if (!ok) throw new Error("beacon-failed");
         } catch {
           try {
-            fetch("/auth/logout-beacon", {
+            fetch(toAPI("/auth/logout-beacon"), {
               method: "POST",
               keepalive: true,
               credentials: "include",
@@ -569,8 +569,8 @@
           try { window.__flushStoreSnapshot?.({ server: true }); } catch {}
           try {
             const blob = new Blob([JSON.stringify({})], { type: "application/json" });
-            navigator.sendBeacon?.("/auth/logout-beacon", blob) ||
-              fetch("/auth/logout-beacon", { method: "POST", keepalive: true, credentials: "include" });
+            navigator.sendBeacon?.(toAPI("/auth/logout-beacon"), blob) ||
+              fetch(toAPI("/auth/logout-beacon"), { method: "POST", keepalive: true, credentials: "include" });
           } catch {}
           try { window.dispatchEvent(new Event("auth:logout")); } catch {}
           return;
@@ -586,8 +586,8 @@
         try { window.__flushStoreSnapshot?.({ server: true }); } catch {}
         try {
           const blob = new Blob([JSON.stringify({})], { type: "application/json" });
-          navigator.sendBeacon?.("/auth/logout-beacon", blob) ||
-            fetch("/auth/logout-beacon", { method: "POST", keepalive: true, credentials: "include" });
+          navigator.sendBeacon?.(toAPI("/auth/logout-beacon"), blob) ||
+            fetch(toAPI("/auth/logout-beacon"), { method: "POST", keepalive: true, credentials: "include" });
         } catch {}
         try { window.dispatchEvent(new Event("auth:logout")); } catch {}
       }, TAB_CLOSE_GRACE_MS);
