@@ -5,6 +5,9 @@
   // 전역 상수로 노출
   window.PROD_BACKEND = API;
 
+  window.API_ORIGIN = API;
+  window.API_BASE   = API;
+
   // ② 모든 상대 fetch를 API 오리진으로 보정 (간단 우회)
   const _fetch = window.fetch.bind(window);
   window.fetch = function(input, init) {

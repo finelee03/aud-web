@@ -40,18 +40,9 @@
   function toAPI(p) {
     try {
       const u = new URL(p, location.href);
-      const ORI = apiOrigin();               // ← 매번 최신값 사용
+      const ORI = window.PROD_BACKEND || window.API_BASE || window.API_ORIGIN;
       if (ORI && /^\/(?:auth|api)\//.test(u.pathname)) {
         return new URL(u.pathname + u.search + u.hash, ORI).toString();
-      }
-      return u.toString();
-    } catch { return p; }
-  }
-  function toAPI(p) {
-    try {
-      const u = new URL(p, location.href);
-      if (API_ORIGIN && /^\/(?:auth|api)\//.test(u.pathname)) {
-        return new URL(u.pathname + u.search + u.hash, API_ORIGIN).toString();
       }
       return u.toString();
     } catch { return p; }
