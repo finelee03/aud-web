@@ -6,6 +6,13 @@
    *  Config / Shims / Globals
    * ───────────────────────────── */
   const DEBUG = false;
+  const log = (...a) => {
+    if (DEBUG || window.__COLLECT_DEBUG__) {
+      try { console.log("[collect]", ...a); } catch {}
+    }
+  };
+  // wiretap 블록에서도 쓰도록 공유
+  try { window.__collect_log__ = log; } catch {}
 
   // 레거시 호환 이벤트(다른 페이지 리스너 보호)
   const EVT_LEGACY_SELECTED = "aud:selectedLabel-changed";
@@ -486,7 +493,7 @@
 
 // [HOTFIX A] wiretap: 모든 소켓 이벤트/메시지 로깅
 (function wiretap(){
-
+  const log = window.__collect_log__ || (()=>{});
   if (window.sock) {
     // Socket.IO ?
     if (typeof window.sock.onAny === "function") {
