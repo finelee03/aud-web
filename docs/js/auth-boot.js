@@ -427,7 +427,6 @@
     if (needsCSRF) {
       token = await getCSRF().catch(() => null);
       if (token) {
-        headers.set("CSRF-Token",   token);
         headers.set("X-CSRF-Token", token);
         headers.set("X-XSRF-Token", token);
       }
@@ -465,7 +464,6 @@
       state.csrf = null;
       try {
         token = await getCSRF(true);
-        headers.set("CSRF-Token",   token);
         headers.set("X-CSRF-Token", token);
         headers.set("X-XSRF-Token", token);
         if (isFD) { try { if (!opt.body.has("_csrf")) opt.body.append("_csrf", token); } catch {} }
