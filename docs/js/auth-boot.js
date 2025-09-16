@@ -290,9 +290,7 @@
     timer(() => {
       let bootTs = 0;
       try { bootTs = +(localStorage.getItem("auth:nav:boot-ts") || 0); } catch {}
-      const newDocBooted = bootTs && (bootTs >= hideAt);
-      if (newDocBooted) return;          // 리로드/내비 → 억제
-      if (isAppNavigation()) return;     // 내부 마킹 → 억제
+      if (isAppNavigation()) return;     // 같은 탭 내비게이션만 억제 (세션스토리지 기준)
 
       // 여기까지 왔으면 진짜 탭 종료
       try { stopHeartbeat(); } catch {}
