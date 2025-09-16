@@ -8,7 +8,7 @@
   --nav-h: 64px;
   --text: #111;
   --muted: #666;
-  --container-w: clamp(450px, 85vw, 1000px);
+  --container-w: clamp(350px, 85vw, 1000px);
   --feed-top-gap: 32px;
   --feed-bottom-gap: 32px;
   --heart-red: #E53935;
@@ -18,13 +18,13 @@
 
   /* === PM Layout tokens === */
   --pm-left: 600px;            /* 좌측(미디어) 최대폭 */
-  --pm-right: 450px;           /* 우측(텍스트) 고정폭 */
+  --pm-right: 350px;           /* 우측(텍스트) 고정폭 */
   --pm-left-min: 300px;        /* 단계C 임계: 좌측이 이보다 작아지면 세로 전환 */
-  --pm-lock-h: 450px; 
+  --pm-lock-h: 350px; 
 
   /* === Sheet geometry === */
   --sheet-w-max: 1280px;       /* 시트 가로 상한 (좌측 최대치 키우려면 ↑) */
-  --sheet-ar-num: 16;          /* 단계A 비율 (16:9 ~= 1.78, 600+450+gutter : 600 ≈ 1.77) */
+  --sheet-ar-num: 16;          /* 단계A 비율 (16:9 ~= 1.78, 600+350+gutter : 600 ≈ 1.77) */
   --sheet-ar-den: 9;
   --pm-fixed-h: 92dvh;         /* 단계B 고정 높이 (필요하면 88dvh~96dvh로 조절) */
 }
@@ -141,7 +141,7 @@ header.nav {
 
 .mine-grid {
   display: grid; justify-content: center; align-items: start;
-  gap: 45px; padding: 0; min-width: 450px;
+  gap: 45px; padding: 0; min-width: 350px;
 }
 @media (min-width: 1100px){
   .mine-grid { grid-template-columns: repeat(3, 260px); padding: 65px 10px 50px; gap: 60px; }
