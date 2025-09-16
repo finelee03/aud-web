@@ -1,7 +1,12 @@
 /* =====================================================================
    0) Base
 ===================================================================== */
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
 :root {
   --accent: #FFA765;
   --nav-h: 64px;
@@ -9,7 +14,11 @@
   --muted: #666;
 }
 
-html, body { height: 100%; }
+html,
+body {
+  height: 100%;
+}
+
 body {
   min-width: 400px;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -25,70 +34,115 @@ body {
 }
 
 /* =====================================================================
-   1) Navigation
+   1) Nav
 ===================================================================== */
 header.nav {
   position: sticky;
   top: 0;
   z-index: 100;
   height: var(--nav-h);
-  background: transparent;
-  border-bottom: none;
+  background: #F5F5F5;
 }
-.nav-inner { height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 27px; }
-.menu { list-style: none; display: flex; gap: 20px; }
+
+.nav-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 27px;
+}
+
+.menu {
+  display: flex;
+  gap: 20px;
+  list-style: none;
+}
+
 .menu a {
+  font-size: 15px;
+  font-weight: 500;
   color: #333;
   text-decoration: none;
-  font-weight: 500;
-  font-size: 15px;
-  letter-spacing: -0.2px;
   opacity: 0.9;
-  transition: opacity .2s, color .2s;
+  transition: 0.2s;
 }
-.menu a:hover { opacity: 1; color: #000; }
-.menu a.active { font-weight: 600; color: #000; }
-.logo-cta { display: inline-flex; align-items: center; justify-content: center; width: 27px; height: 27px; }
-.logo-cta img { width: 27px; height: 27px; object-fit: contain; display: block; }
 
-/* ===== 1) Hero (Collect 제목/부제/링크만) ===== */
-.collect { background: transparent; }
-.hero {
-  max-width: 960px;
-  margin: 0 auto;
-  text-align: center;
-  padding-top: 80px;
+.menu a:hover {
+  color: #000;
+  opacity: 1;
 }
-.title {
-  margin: 0;
-  font-weight: 700;
-  color: #111;
-  letter-spacing: -2px;
-}
-@media (min-width:1200px) { .title { font-size: 72px; line-height: 1.2; } }
-@media (max-width:1199px) { .title { font-size: 62px; line-height: 1.1; } }
 
-.subtitle {
-  margin-top: 5px;
-  font-size: 24px;
-  font-weight: 400;
-  color: #888;
+.menu a.active {
+  color: #000;
+  font-weight: 600;
+}
+
+.logo-cta img {
+  width: 27px;
+  height: 27px;
+  object-fit: contain;
 }
 
 /* =====================================================================
    2) Hero
 ===================================================================== */
-.collect .hero { opacity: 0; transform: translateY(24px); }
-.collect .hero.is-in {
-  animation: heroUp 700ms cubic-bezier(.22,.61,.36,1) 60ms forwards;
+.hero {
+  max-width: 960px;
+  margin: 0 auto;
+  padding-top: 80px;
+  text-align: center;
 }
+
+.title {
+  margin: 0;
+  color: #111;
+  letter-spacing: -2px;
+  font-weight: 700;
+}
+
+@media (min-width: 1200px) {
+  .title {
+    font-size: 72px;
+    line-height: 1.2;
+  }
+}
+
+@media (max-width: 1199px) {
+  .title {
+    font-size: 62px;
+    line-height: 1.1;
+  }
+}
+
+.subtitle {
+  margin-top: 5px;
+  color: #888;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+/* =====================================================================
+   3) Hero Animation
+===================================================================== */
+.custom .hero {
+  opacity: 0;
+  transform: translateY(24px);
+  will-change: transform, opacity; /* why: hint GPU for smoother entry */
+}
+
+.custom .hero.is-in {
+  animation: heroUp 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) 60ms forwards;
+}
+
 @keyframes heroUp {
-  0% { opacity: 0; transform: translateY(24px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .collect .hero { opacity: 1; transform: none; }
-  .collect .hero.is-in { animation: none; }
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 
