@@ -55,12 +55,12 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
 /* Title */
 .title-box{
   position:absolute; z-index:1; top:40px; left:0; right:0;
-  width:86%; min-width:385px; margin:0 auto; padding:0 0 0 35px; box-sizing:border-box;
+  width:80%; min-width:385px; margin:0 auto; padding:0 0 0 35px; box-sizing:border-box;
 }
 .h0{ margin:0; font-weight:700; color:#fff !important; }
 .h0 .tone{ color:var(--accent) !important; }
 .sub{ color:var(--muted); font-weight:800; }
-.subRow{ display:inline-flex; align-items:center; gap:0; flex-wrap:wrap; }
+.subRow{ display:inline-flex; align-items:center; gap:0; flex-wrap:wrap; margin-top:10px; }
 .audWordLink{ display:inline-flex; align-items:center; text-decoration:none; margin-left:5px; }
 .audWord{ color:#fff; font-weight:800; line-height:1; letter-spacing:-.7px; opacity:0; transform:translateX(-18px); display:inline-block; animation:audWordIn .6s ease-out forwards; }
 @keyframes audWordIn{ to{ opacity:1; transform:none; } }
