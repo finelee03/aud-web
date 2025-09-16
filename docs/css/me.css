@@ -13,7 +13,7 @@
 
   /* Layout */
   --nav-h: 64px;
-  --container-w: clamp(450px, 85vw, 1000px);
+  --container-w: clamp(350px, 85vw, 1000px);
 
   /* Quick/Feed spacing */
   --feed-top-gap: 32px;
@@ -22,9 +22,9 @@
   /* Post Modal Layout tokens (PM) */
   --pm-gutter: 14px;
   --pm-left: 600px;          /* 좌측(미디어) 최대폭 */
-  --pm-right: 450px;         /* 우측(텍스트) 고정폭 */
+  --pm-right: 350px;         /* 우측(텍스트) 고정폭 */
   --pm-left-min: 300px;      /* 세로 전환 임계 좌측폭 */
-  --pm-lock-h: 450px;
+  --pm-lock-h: 350px;
 
   /* Sheet geometry */
   --sheet-w-max: 1280px;
