@@ -25,7 +25,7 @@ body{
   -moz-osx-font-smoothing: grayscale;
 
   /* 최소 폭 및 로그인 페이지 레이아웃 */
-  min-width: 475px;
+  min-width: 400px;
   min-height: 100svh;
   display: grid;
   grid-template-rows: var(--nav-h) 1fr; /* 1행=네비, 2행=컨텐츠 */
@@ -66,7 +66,7 @@ header.nav{
 ===================================================================== */
 /* 카드 */
 .auth-card{
-  width: min(460px, 92vw);
+  width: min(385px, 92vw);
   margin: 0 auto;
   padding: 24px;
   background: var(--card-bg);

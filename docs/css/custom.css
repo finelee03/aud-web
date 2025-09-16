@@ -20,7 +20,7 @@ body {
 }
 
 body {
-  min-width: 475px;
+  min-width: 400px;
   color: var(--text);
   background: #F5F5F5;
   font-family: 'Inter', sans-serif;

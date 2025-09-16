@@ -22,7 +22,7 @@ body{
   background:#fff;
   -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
-  min-width:475px;          /* 474↓에서는 이 값 때문에 가로 스크롤 */
+  min-width:400px;          /* 474↓에서는 이 값 때문에 가로 스크롤 */
   overflow-x:auto;
 }
 
@@ -55,7 +55,7 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
 /* Title */
 .title-box{
   position:absolute; z-index:1; top:40px; left:0; right:0;
-  width:86%; min-width:475px; margin:0 auto; padding:0 0 0 35px; box-sizing:border-box;
+  width:86%; min-width:400px; margin:0 auto; padding:0 0 0 35px; box-sizing:border-box;
 }
 .h0{ margin:0; font-weight:700; color:#fff !important; }
 .h0 .tone{ color:var(--accent) !important; }
@@ -86,7 +86,7 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
   /* 스펙 이미지: 카드 폭 75% (유동), 높이 450 유지 */
   width:75%;
   max-width:none;
-  min-width:475px;
+  min-width:400px;
   margin:0 auto;
 
   padding:0 0 0 0;               /* 좌 강조 패딩 유지 */
@@ -130,7 +130,7 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
   /* 동일하게 카드 폭 75% (유동), 높이 450 유지 */
   width:75%;
   max-width:none;
-  min-width:475px;
+  min-width:400px;
   margin:0 auto;
   padding:0 0 0 0;            
   display:grid; grid-template-columns:1fr 400px; align-items:center;

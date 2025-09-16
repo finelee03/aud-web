@@ -19,7 +19,7 @@ html, body {
 }
 
 body {
-  min-width: 475px; /* 450px 이하 강제 가로 스크롤 */
+  min-width: 400px; /* 450px 이하 강제 가로 스크롤 */
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
     Roboto, 'Helvetica Neue', Arial, sans-serif;
   color: var(--text);

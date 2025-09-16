@@ -47,7 +47,7 @@ body{
   font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color: var(--text);
   background: #F5F5F5;
-  min-width: 475px;
+  min-width: 400px;
 }
 
 /* 접근성: 키보드 포커스 링 */
