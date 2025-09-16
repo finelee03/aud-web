@@ -161,6 +161,16 @@
     return { ...opt, headers };
   }
 
+  const API_ORIGIN = window.PROD_BACKEND || window.API_BASE || window.API_ORIGIN || null;
+  const toAPI = (p) => {
+    try {
+      const u = new URL(p, location.href);
+      return (API_ORIGIN && /^\/(api|auth)\//.test(u.pathname))
+        ? new URL(u.pathname + u.search + u.hash, API_ORIGIN).toString()
+        : u.toString();
+    } catch { return p; }
+  };
+
 
   /* =========================================================
   * AVATAR UTIL (profile-ready; no 404; future-proof)
@@ -402,7 +412,7 @@
           else sessionStorage.setItem(SELECTED_KEY, label);
         } catch { try { sessionStorage.setItem(SELECTED_KEY, label); } catch {} }
       });
-      location.assign(`/labelmine.html?label=${encodeURIComponent(label)}`);
+      location.assign(`${(window.pageHref? pageHref('labelmine.html') : './labelmine.html')}?label=${encodeURIComponent(label)}`);
     });
 
     return btn;
@@ -601,15 +611,14 @@
       path.setAttribute("stroke", "#777");
       path.setAttribute("stroke-width", "1.5");
     }
-  }
 
-    // [PATCH #2] Safari/WebView 잔상 제거용 강제 리페인트
   try {
     if (!pressed && path && path.isConnected) {
       const p2 = path.cloneNode(true);
       path.replaceWith(p2);
     }
   } catch {}
+  }
 
   // 문서(또는 컨테이너) 내 아이콘 업그레이드: .ico-heart → SVG 교체
   function upgradeHeartIconIn(root = document) {
@@ -812,7 +821,7 @@ const LikeCache = (() => {
 
 
   const nsOf = (item) => String(item?.ns ?? "default").trim().toLowerCase();
-  const blobURL = (item) => `/api/gallery/${encodeURIComponent(item.id)}/blob`;
+  const blobURL = (item) => toAPI(`/api/gallery/${encodeURIComponent(item.id)}/blob`);
   const fmtDate = (ts) => {
     try {
       const d = new Date(Number(ts) || Date.now());
@@ -1948,7 +1957,11 @@ const LikeCache = (() => {
       console.warn("[rt] socket.io client not found. Load /socket.io/socket.io.js in HTML.");
       return null;
     }
-    __sock = window.io({ path: "/socket.io", withCredentials: true });
+    __sock = window.io(API_ORIGIN || undefined, {
+      path: "/socket.io",
+      withCredentials: true,
+      transports: ["websocket","polling"]
+    });
 
     __sock.on("connect", () => {
       // 재연결 시 현재 보이는 카드/오픈 모달 재구독
@@ -2937,10 +2950,12 @@ const LikeCache = (() => {
     // 2) 투표 실시간 업데이트 수신 시 캐시 무효화(소켓/BC 경유)
     //    - server.js는 'vote:update'를 socket.io로 쏨
     try {
-      if (window.io && !window.__insightsVoteHooked) {
-        const s = window.io({ path:"/socket.io" });
-        s.on("vote:update", ()=> invalidate(getNS()));
-        window.__insightsVoteHooked = true;
+      if (!window.__insightsVoteHooked) {
+        const s = ensureSocket();
+        if (s) {
+          s.on("vote:update", ()=> invalidate(getNS()));
+          window.__insightsVoteHooked = true;
+        }
       }
     } catch {}
     // 3) NS가 바뀌면 캐시 분리 — store.js가 이벤트를 쏴줌
