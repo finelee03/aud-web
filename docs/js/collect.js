@@ -80,6 +80,19 @@
     const map = loadNfcMap();
     return map[key] || null;
   }
+  // 서버에서 UID→label 조회 (성공 시 라벨 문자열, 없으면 null)
+  async function fetchServerLabel(uid){
+    const key = normalizeUid(uid);
+    if (!key) return null;
+    try {
+      const q = new URLSearchParams({ uid: key });
+      const res = await fetch(`/api/nfc/label?${q.toString()}`, { credentials: "include" });
+      if (!res.ok) return null;
+      const data = await res.json().catch(()=>null);
+      return (data && typeof data.label === "string" && data.label) ? data.label : null;
+    } catch { return null; }
+  }
+
   // 초기 예시 매핑이 있었다면 보존/주입(필요 시 사용자 입맛대로 수정)
   (function ensureSeedMap(){
     const map = loadNfcMap();
@@ -212,6 +225,17 @@
     lastSeen = { uid, label, ts: now };
     pendingUid = uid;
     pendingLabel = label || null;
+    // 서버 라벨 조회(로컬에 없을 때만) → 도착 즉시 대기값 갱신
+    if (!pendingLabel && uid) {
+      fetchServerLabel(uid).then((srvLabel) => {
+        if (srvLabel && pendingUid === uid && !pendingLabel) {
+          pendingLabel = srvLabel;
+          lastSeen.label = srvLabel;
+          try { window.dispatchEvent(new Event("pending:uid")); } catch {}
+          try { renderResult?.(); } catch {}
+        }
+      }).catch(()=>{ /* ignore */ });
+    }
 
     log("handleUID:", { uid, label });
 
