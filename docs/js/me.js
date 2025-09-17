@@ -1382,4 +1382,60 @@
   } else {
     boot();
   }
+
+  // === Logout button support (ported from mine.js) ===
+  async function __safeBeaconLogout() {
+    try { window.__flushStoreSnapshot?.({ server:true }); } catch {}
+    try {
+      const blob = new Blob([JSON.stringify({})], { type: "application/json" });
+      (navigator.sendBeacon && navigator.sendBeacon("/auth/logout-beacon", blob)) ||
+        await fetch("/auth/logout-beacon", { method: "POST", keepalive: true, credentials: "include" });
+    } catch {}
+    try { sessionStorage.removeItem("auth:flag"); } catch {}
+    try { localStorage.removeItem("auth:flag"); localStorage.removeItem("auth:userns"); } catch {}
+    try { window.dispatchEvent(new Event("auth:logout")); } catch {}
+  }
+
+  function bindLogoutButtonForMe() {
+    const btn = $("#btn-logout");
+    if (!btn || btn.__bound) return;
+    btn.__bound = true;
+
+    try { btn.style.pointerEvents = "auto"; btn.style.zIndex = "1000"; btn.tabIndex = 0; } catch {}
+
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { btn.disabled = true; btn.setAttribute("aria-busy", "true"); } catch {}
+
+      if (typeof window.auth?.logout === "function") {
+        try { await window.auth.logout(e); return; } catch {}
+      }
+
+      await __safeBeaconLogout();
+      try { window.auth?.markNavigate?.(); } catch {}
+
+      const loginURL = new URL("./login.html", document.baseURI);
+      loginURL.searchParams.set("next", new URL("./me.html", document.baseURI).href);
+      location.assign(loginURL.href);
+    }, { capture: false });
+
+    btn.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); btn.click(); }
+    });
+
+    try {
+      const mo = new MutationObserver(() => {
+        const b = $("#btn-logout");
+        if (b && !b.__bound) bindLogoutButtonForMe();
+      });
+      mo.observe(document.body, { childList:true, subtree:true });
+    } catch {}
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindLogoutButtonForMe, { once: true });
+  } else {
+    bindLogoutButtonForMe();
+  }
+
 })();

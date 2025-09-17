@@ -536,3 +536,47 @@ progress#m-rate-bar::-webkit-progress-value{
   padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0, 0, 1px, 1px); white-space: nowrap; border: 0;
 }
+
+
+/* ====== Imported from mine.css: footer + logout button (for me.html) ====== */
+.mine-footer{
+  margin-top: 48px; padding: 24px 0 64px;
+  border-top: 1px solid rgba(0,0,0,.06); background: transparent;
+}
+.mine-footer .footer-inner{
+  max-width: var(--container-max, 1500px);
+  padding: 0 var(--container-pad, 24px);
+  margin: 0 auto; display: flex; justify-content: center;
+}
+
+.mine-footer{ padding-bottom: 48px; }
+
+.btn-logout{
+  appearance: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-width: 160px; padding: 12px 20px; line-height: 1;
+  font-size: 15px; font-weight: 600; letter-spacing: .2px;
+  border: 1px solid rgba(0,0,0,.14); border-radius: 9999px;
+  background: #e9e9ec; color: #111; cursor: pointer;
+  transition: background .18s ease, box-shadow .18s ease, transform .06s ease, color .18s ease, opacity .18s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+
+.btn-logout:hover{ background: #dedee2; }
+
+.btn-logout:focus{ outline: none; box-shadow: 0 0 0 3px rgba(255,167,101,.25); }
+
+.btn-logout:active{ background: var(--accent); color:#111; transform: translateY(1px); }
+
+.btn-logout[aria-busy="true"]{ background: var(--accent); color:#111; opacity: .95; pointer-events: none; }
+
+.btn-logout .icon-logout.ico{
+  --ico: url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512.292%20512.292%22%3E%3Cpath%20d%3D%22M256.061%2C0L256.061%2C0c17.673%2C0%2C32%2C14.327%2C32%2C32v106.667c0%2C17.673-14.327%2C32-32%2C32l0%2C0c-17.673%2C0-32-14.327-32-32V32C224.061%2C14.327%2C238.387%2C0%2C256.061%2C0z%22/%3E%3Cpath%20d%3D%22M330.727%2C105.387L330.727%2C105.387c-0.157%2C10.742%2C5.259%2C20.8%2C14.315%2C26.581c80.432%2C49.143%2C105.796%2C154.185%2C56.652%2C234.616S247.51%2C472.38%2C167.078%2C423.237S61.282%2C269.052%2C110.426%2C188.62c14.042-22.982%2C33.324-42.315%2C56.269-56.418c9.211-5.781%2C14.773-15.92%2C14.699-26.795l0%2C0c0.049-17.673-14.238-32.039-31.911-32.088c-6.07-0.017-12.02%2C1.693-17.155%2C4.931C22.233%2C146.634-11.58%2C291.318%2C56.803%2C401.412s213.067%2C143.907%2C323.161%2C75.524s143.907-213.067%2C75.524-323.161c-19.035-30.645-44.879-56.489-75.524-75.524c-14.997-9.461-34.824-4.973-44.285%2C10.024C332.447%2C93.397%2C330.731%2C99.33%2C330.727%2C105.387z%22/%3E%3C/svg%3E');
+}
+
+.btn-logout .icon-logout{ width: 20px; height: 20px; flex: 0 0 auto; }
+
+@media (max-width: 624px){
+  .mine-footer{ padding-bottom: 48px; }
+  .btn-logout{ width: 100%; max-width: 360px; }
+}

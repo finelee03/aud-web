@@ -2225,7 +2225,6 @@ const LikeCache = (() => {
       }
 
     try { ensureHeartCSS(); upgradeHeartIconIn(document); } catch {}
-    bindLogoutButton();
     bindTitleToMe();
     try { Avatar.install(document); observeAvatars(); } catch {}
 
@@ -2732,53 +2731,9 @@ const LikeCache = (() => {
   /* =========================================================
    * 13) LOGOUT BUTTON (robust, idempotent)
    * ========================================================= */
-  async function __safeBeaconLogout() {
-    try { window.__flushStoreSnapshot?.({ server:true }); } catch {}
-    try {
-      const blob = new Blob([JSON.stringify({})], { type: "application/json" });
-      (navigator.sendBeacon && navigator.sendBeacon("/auth/logout-beacon", blob)) ||
-        await fetch("/auth/logout-beacon", { method: "POST", keepalive: true, credentials: "include" });
-    } catch {}
-    try { sessionStorage.removeItem("auth:flag"); } catch {}
-    try { localStorage.removeItem("auth:flag"); localStorage.removeItem("auth:userns"); } catch {}
-    try { window.dispatchEvent(new Event("auth:logout")); } catch {}
-  }
+  
 
-  function bindLogoutButton() {
-    const btn = $("#btn-logout");
-    if (!btn || btn.__bound) return;
-    btn.__bound = true;
-
-    try { btn.style.pointerEvents = "auto"; btn.style.zIndex = "1000"; btn.tabIndex = 0; } catch {}
-
-    btn.addEventListener("click", async (e) => {
-      e.preventDefault(); e.stopPropagation();
-      try { btn.disabled = true; btn.setAttribute("aria-busy", "true"); } catch {}
-
-      if (typeof window.auth?.logout === "function") {
-        try { await window.auth.logout(e); return; } catch {}
-      }
-
-      await __safeBeaconLogout();
-      try { window.auth?.markNavigate?.(); } catch {}
-      const loginURL = new URL("./login.html", document.baseURI);
-      loginURL.searchParams.set("next", new URL("./mine.html", document.baseURI).href);
-      location.assign(loginURL.href);
-    }, { capture: false });
-
-    btn.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); btn.click(); }
-    });
-
-    // 동적으로 버튼이 교체되는 경우 재바인딩
-    try {
-      const mo = new MutationObserver(() => {
-        const b = $("#btn-logout");
-        if (b && !b.__bound) bindLogoutButton();
-      });
-      mo.observe(document.body, { childList:true, subtree:true });
-    } catch {}
-  }
+  
 
   /* =========================================================
   * 14) TITLE → me 페이지 이동(인증 가드 포함)
