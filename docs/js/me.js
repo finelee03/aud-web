@@ -501,7 +501,19 @@
     n.onclick = () => { try { window.focus(); } catch {} try { n.close(); } catch {} };
   }
 
+  const __recentNotify = new Map(); // tag -> timestamp(ms)
+  const __RECENT_TTL = 4000; // 4초 내 동일 tag 차단 (원하면 2~5초로 조절)
   function pushNotice(text, sub = "", opt = {}) {
+    // 중복 억제: tag가 있으면 TTL 체크
+    const tag = opt?.tag || "";
+    if (tag) {
+      const now = Date.now();
+      const last = __recentNotify.get(tag) || 0;
+      if (now - last < __RECENT_TTL) return; // 너무 최근이면 스킵
+      __recentNotify.set(tag, now);
+      // 맵 청소 (간단)
+      for (const [k, t] of __recentNotify) if (now - t > __RECENT_TTL * 4) __recentNotify.delete(k);
+    }
     const ul = $("#notify-list");
     const empty = $("#notify-empty");
     if (!ul) return;
@@ -1340,6 +1352,34 @@
           if (p?.type && String(p.type).startsWith("self:")) handleFeedSelfEvent(p.type, p.data || {});
         } catch {}
       }
+      // 원격(다른 사람이 한) 액션 알림 폴백
+      if (e.key.startsWith("notify:remote:") && e.newValue) {
+        if (!isNotifyOn()) return;  // ⬅️ 토글이 꺼져 있으면 무시
+        try {
+          const p = parseJSON(e.newValue, null);
+          const t = String(p?.type || "");
+          const d = p?.data || {};
+          // 내 게시물인 경우에만 알림 (mine.js가 1차 필터링했지만 2차 방어)
+          const ns = getNS();
+          const ownerNS = String(d?.owner?.ns || d?.ns || "").toLowerCase();
+          const mineFlag = (d?.mine === true) || (ownerNS && ownerNS === ns);
+          if (!mineFlag) return;
+          if (t === "item:like" && d?.liked) pushNotice("내 게시물이 좋아요를 받았어요", `총 ${Number(d.likes||0)}개`, { tag:`like:${d.id}`, data:{ id:String(d.id||"") } });
+          if (t === "vote:update") {
+            try {
+              const entries = Object.entries(d.counts || {});
+              const max = Math.max(...entries.map(([, n]) => Number(n||0)), 0);
+              const tops = entries.filter(([, n]) => Number(n||0) === max && max > 0).map(([k])=>k);
+              const total = entries.reduce((s, [, n]) => s + Number(n||0), 0);
+              const label = tops.length ? tops.join(", ") : "—";
+              pushNotice("내 게시물 투표가 업데이트됐어요", `최다표: ${label} · 총 ${total}표`, { tag:`vote:${d.id}`, data:{ id:String(d.id||"") } });
+            } catch {
+              pushNotice("내 게시물 투표가 업데이트됐어요", "", { tag:`vote:${d?.id||""}`, data:{ id:String(d?.id||"") } });
+            }
+          }
+        } catch {}
+      }
+
     }, { capture: true });
 
     window.addEventListener("auth:state", refreshQuickCounts);
@@ -1358,8 +1398,43 @@
       bc.addEventListener("message", (e) => {
         const m = e?.data; if (!m || m.kind !== "feed:event") return;
         const { type, data } = m.payload || {};
-        if (!type || !String(type).startsWith("self:")) return;
-        handleFeedSelfEvent(type, data);
+        if (!type) return;
+
+        // 1) 내가 한 행동(self:*) → 기존 로직 유지
+        if (String(type).startsWith("self:")) {
+          handleFeedSelfEvent(type, data);
+          return;
+        }
+
+        // 2) 원격(다른 사람이 한) 행동 → 알림 (소켓 미연결/다른 탭만 mine 열려 있을 때 대비)
+        //    mine.js 쪽에서 1차 필터링하지만, 여기서도 내 게시물인지 2차 방어
+        const ownerNS = String(data?.owner?.ns || data?.ns || "").toLowerCase();
+        const mineFlag = (data?.mine === true) || (ownerNS && ownerNS === ns);
+        if (!mineFlag) return;
+
+        if (type === "item:like" && data?.liked) {
+          pushNotice(
+            "내 게시물이 좋아요를 받았어요",
+            `총 ${Number(data.likes || 0)}개`,
+            { tag: `like:${data.id}`, data: { id: String(data.id || "") } }
+          );
+        }
+        if (type === "vote:update") {
+          try {
+            const entries = Object.entries(data?.counts || {});
+            const max = Math.max(...entries.map(([, n]) => Number(n || 0)), 0);
+            const tops = entries.filter(([, n]) => Number(n || 0) === max && max > 0).map(([k]) => k);
+            const total = entries.reduce((s, [, n]) => s + Number(n || 0), 0);
+            const label = tops.length ? tops.join(", ") : "—";
+            pushNotice(
+              "내 게시물 투표가 업데이트됐어요",
+              `최다표: ${label} · 총 ${total}표`,
+              { tag: `vote:${data.id}`, data: { id: String(data.id || "") } }
+            );
+          } catch {
+            pushNotice("내 게시물 투표가 업데이트됐어요", "", { tag: `vote:${data?.id || ""}`, data: { id: String(data?.id || "") } });
+          }
+        }
       });
     } catch {}
     if (isNotifyOn() && wantsNative() && hasNativeAPI() && Notification.permission === "default") {

@@ -1976,6 +1976,7 @@ const LikeCache = (() => {
     __sock.on("item:like", (p) => {
       try { window.applyItemLikeEvent?.(p); } catch {}
       try { __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type: "item:like", data: p } }); } catch {}
+      try { notifyRemote("item:like", p); } catch {}
     });
 
     __sock.on("vote:update", (p) => {
@@ -1989,6 +1990,7 @@ const LikeCache = (() => {
       try {
         __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type:"vote:update", data: p } });
       } catch {}
+      try { notifyRemote("item:like", p); } catch {}
     });
 
     __sock.on("item:removed", (p) => {
@@ -2727,16 +2729,23 @@ const LikeCache = (() => {
     } catch {}
   }
 
+  // === FEED → other tabs (me.html) 알림 브릿지: '다른 사람이 한' 행동을 방송 ===
+  function notifyRemote(type, data){
+    // 이 이벤트가 "내" 게시물에 대한 것인지 간단히 거른 뒤만 알림 전파
+    try {
+      const ns = (typeof getNS === 'function' ? getNS() : 'default');
+      const ownerNS = String(data?.owner?.ns || data?.ns || "").toLowerCase();
+      const mineFlag = (data?.mine === true) || (ownerNS && ownerNS === ns);
+      if (!mineFlag) return; // 내 게시물이 아니면 알림 X
+      // BroadcastChannel로도 쏘고
+      try { __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type, data } }); } catch {}
+      // localStorage 폴백 키: notify:remote:<ns>
+      localStorage.setItem(`notify:remote:${ns}`, JSON.stringify({ type, data, t: Date.now() }));
+    } catch {}
+  }
 
   /* =========================================================
-   * 13) LOGOUT BUTTON (robust, idempotent)
-   * ========================================================= */
-  
-
-  
-
-  /* =========================================================
-  * 14) TITLE → me 페이지 이동(인증 가드 포함)
+  * 13) TITLE → me 페이지 이동(인증 가드 포함)
   * ========================================================= */
   function bindTitleToMe() {
     // 1) 우선 A안: a#title-link가 있으면 그걸 사용
