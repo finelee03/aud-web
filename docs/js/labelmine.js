@@ -54,7 +54,7 @@ const BOOT_SEEN_KEY  = "aud:boot:seen";
 const SELECTED_KEY = "aud:selectedLabel";          // sessionStorage
 const MIRROR_KEY   = "aud:selectedLabel:mirror";   // localStorage broadcast
 const EVT          = "aud:selectedLabel-changed";
-const FALLBACK_URL = "/Users/ihwain/projects/aud/aud-web/docs/mine.html";
+const FALLBACK_URL = pageHref("mine.html");
 
 /* ---- app data (map, stars, assets) ---- */
 const MAX_STARS = 3;
@@ -162,6 +162,17 @@ const SESSION_ALIVE_KEY = "aud:session:alive"; // sessionStorage only
   });
 
 })();
+
+// [NEW] 접두사 계산 + 페이지 경로 생성기
+function ghPrefix() {
+  const seg = location.pathname.split("/").filter(Boolean);
+  const repo = seg[0] || "";
+  return (repo && !/\.html?$/i.test(repo)) ? `/${repo}/` : "/";
+}
+function pageHref(rel = "") {
+  return ghPrefix() + String(rel).replace(/^\//, "");
+}
+
 
 /* ========================================================================== *
  * 1) SMALL UTILS (safe JSON, clamp, DPR, etc.)
@@ -1816,7 +1827,7 @@ function goMineAfterShare(label = getLabel()) {
       window.setSelectedLabel(label);
     }
   } catch {}
-  const url = `/mine.html?label=${encodeURIComponent(label)}&posted=1`;
+  const url = pageHref("/mine.html")+ "?label=${encodeURIComponent(label)}&posted=1";
   // 뒤로가기로 작성 화면 복귀를 허용하려면 assign, 히스토리 덮으려면 replace
   location.assign(url);
 }
