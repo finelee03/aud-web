@@ -54,7 +54,7 @@ const BOOT_SEEN_KEY  = "aud:boot:seen";
 const SELECTED_KEY = "aud:selectedLabel";          // sessionStorage
 const MIRROR_KEY   = "aud:selectedLabel:mirror";   // localStorage broadcast
 const EVT          = "aud:selectedLabel-changed";
-const FALLBACK_URL = "/mine.html";
+const FALLBACK_URL = "/Users/ihwain/projects/aud/aud-web/docs/mine.html";
 
 /* ---- app data (map, stars, assets) ---- */
 const MAX_STARS = 3;
