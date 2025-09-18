@@ -574,8 +574,9 @@
 
   function ensureSocket() {
     if (!isNotifyOn()) return null;
-    if (socket || !window.io) return socket || null;
-
+    if (socket) return socket;
+    if (window.sock) { socket = window.sock; return socket; } // ← 이미 socket-init에서 만든 인스턴스 재사용
+    if (!window.io) return null;
     socket = window.io({ path: "/socket.io" });
     socket.on("connect", () => {
       if (MY_ITEM_IDS.size) socket.emit("subscribe", { items: [...MY_ITEM_IDS] });

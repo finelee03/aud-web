@@ -6,21 +6,8 @@ const log = (msg) => {
   el.appendChild(div);
 };
 
-const sock = (window.io)
-  ? window.io({
-      // 필요 시 전역에 API_ORIGIN(예: https://api.example.com) 주입
-      path: "/socket.io",
-      withCredentials: true,
-      transports: ["websocket", "polling"]
-    })
-  : null;
-
+// 이미 IIFE에서 window.sock을 만들었으므로 그것만 사용
+const sock = window.sock;
 sock?.on("connect", () => log("[sock] connected"));
-sock?.on("connect_error", (err) => log("[sock] connect_error " + err?.message));
-
-sock.on("connect", () => log("[sock] connected"));
-
-sock.on("nfc", evt => {
-  log("[NFC] " + JSON.stringify(evt));
-  // evt = { id, label, ts, rssi, mac, device }
-});
+sock?.on("connect_error", (err) => log("[sock] connect_error " + (err?.message || "")));
+sock?.on("nfc", (evt) => log("[NFC] " + JSON.stringify(evt)));
