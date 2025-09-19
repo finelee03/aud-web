@@ -2043,6 +2043,17 @@ const LikeCache = (() => {
 
     __sock.on("item:like", (p) => {
       try { window.applyItemLikeEvent?.(p); } catch {}
+      try {
+        const id   = String(p?.id || p?.itemId || "");
+        const likes= (typeof p?.likes === "number" ? p.likes : (p?.data?.likes ?? p?.item?.likes));
+        const actor= p?.by ?? p?.user_id ?? p?.uid ?? p?.userId ?? p?.actor ?? p?.user?.id ?? null;
+        const myId = (typeof getMeId === "function" && getMeId()) || (window.__ME_ID || null);
+        const isMineEvent = (actor != null) && (String(actor) === String(myId));
+        if (id && !isMineEvent && typeof likes === "number") {
+          // 의도(l)는 보존, 카운트(c)만 반영 → 모든 페이지 동일 숫자
+          window.setLikeCountOnly?.(id, likes);
+        }
+      } catch {}
       try { __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type: "item:like", data: p } }); } catch {}
     });
 
@@ -2166,6 +2177,48 @@ const LikeCache = (() => {
       }
     } catch {}
   }
+
+  // === Store Likes → UI Bridge (mount early) ==========================
+  (function bridgeStoreLikesToUI(){
+    if (!window.readLikesMap) return;
+
+    function applyMap(map){
+      if (!map) return;
+      for (const [id, rec] of Object.entries(map)){
+        const liked = (typeof rec?.l === "boolean") ? rec.l : null;
+        const likes = (typeof rec?.c === "number")  ? rec.c : null;
+        if (liked !== null || likes !== null) {
+          // UI 전체 동기화
+          try { updateLikeUIEverywhere(id, liked, likes); } catch {}
+          // 낙관 캐시도 보강(새로 연 모달/그리드 초기값 일치)
+          try { LikeCache?.set?.(viewerNS(), String(id), liked ?? undefined, likes ?? undefined); } catch {}
+          // FEED 메모리에도 반영
+          try {
+            const idx = FEED.idxById.get(String(id));
+            if (typeof idx === "number" && FEED.items[idx]) {
+              if (liked !== null) FEED.items[idx].liked = liked;
+              if (likes !== null) FEED.items[idx].likes = likes;
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // ① 초기 스냅샷으로 즉시 보정
+    try { applyMap(readLikesMap()); } catch {}
+
+    // ② 같은 탭 내 변경 이벤트
+    window.addEventListener("itemLikes:changed", (e)=>{
+      applyMap(e?.detail?.map || readLikesMap());
+    });
+
+    // ③ 다른 탭에서 온 동기화(localStorage)도 수신
+    window.addEventListener("storage", (e)=>{
+      if (e && e.key === window.LIKES_SYNC_KEY && e.newValue) {
+        try { const payload = JSON.parse(e.newValue); applyMap(payload?.map || null); } catch {}
+      }
+    });
+  })();
 
   /* =========================================================
    * 10) HERO/이벤트/부트

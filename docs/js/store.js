@@ -323,6 +323,7 @@ function saveLikes(map){
     emitSync(LIKES_SYNC_KEY, { map });
     // 서버 동기화 (선택)
     scheduleServerSync();
+    window.dispatchEvent(new CustomEvent("itemLikes:changed", { detail: { map } }));
     // 내부 이벤트가 필요하면: window.dispatchEvent(new Event("itemLikes:changed"));
   }catch{}
 }
@@ -336,9 +337,17 @@ function getLikeIntent(itemId){
   const r = loadLikes()[String(itemId)];
   return r ? { liked: !!r.l, likes: (typeof r.c==="number"? r.c : null), t: r.t||0 } : null;
 }
+function setLikeCountOnly(itemId, likes){
+  const m = loadLikes();
+  const cur = m[String(itemId)] || {};
+  m[String(itemId)] = { l: !!cur.l, c: Math.max(0, Number(likes)||0), t: Date.now() };
+  saveLikes(m);
+}
+
 window.readLikesMap = () => ({ ...loadLikes() });
 window.setLikeIntent = setLikeIntent;
 window.getLikeIntent = getLikeIntent;
+window.setLikeCountOnly = setLikeCountOnly;
 
 /* Storage 라우팅 래퍼: 게스트=SESSION, 회원=LOCAL */
 const S = new (class {
@@ -423,7 +432,7 @@ function applyIncoming(kindKey, payload){
     if (kindKey === LIKES_SYNC_KEY && payload?.map){
       // 세션에만 반영 (재브로드캐스트 금지)
       S.setItem(LIKES_KEY, JSON.stringify(payload.map));
-      // window.dispatchEvent(new Event("itemLikes:changed"));
+      window.dispatchEvent(new CustomEvent("itemLikes:changed", { detail: { map: payload.map } }));
       return;
     }
     if (kindKey === HEARTS_SYNC_KEY && payload?.map){
