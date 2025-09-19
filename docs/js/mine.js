@@ -90,6 +90,7 @@
   const clearAuthedFlag = () => sessionStorage.removeItem(AUTH_FLAG_KEY);
   const serverAuthed    = () => !!(window.auth && window.auth.isAuthed && window.auth.isAuthed());
   const sessionAuthed   = () => hasAuthedFlag() || serverAuthed();
+  const viewerNS = () => (typeof getNS === 'function' ? getNS() : 'default');
 
   // preserve auth flag across reset=1
   (function preserveAuthFlagOnReset() {
@@ -951,7 +952,7 @@ const LikeCache = (() => {
     const jobs = ids.map(async (rawId) => {
       const id  = String(rawId);
       const idx = FEED.idxById.get(id);
-      const ns  = (typeof idx === "number" && FEED.items[idx]?.ns) ? FEED.items[idx].ns : (window.getNS ? getNS() : "default");
+      const viewerNS = (window.getNS ? getNS() : "default");
       const pid = encodeURIComponent(id);
       const nsq = `ns=${encodeURIComponent(ns)}`;
 
@@ -961,8 +962,8 @@ const LikeCache = (() => {
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-          LikeCache.mergeServer(ns, id, liked, likes); // [ADD]
-          const pref = LikeCache.get(ns, id);
+          LikeCache.mergeServer(viewerNS, id, liked, likes);
+          const pref = LikeCache.get(viewerNS, id);
           const L = (pref && pref.liked != null) ? pref.liked : liked;
           const C = (pref && typeof pref.likes === "number") ? pref.likes : likes;
           applyUI(id, L, C); 
@@ -975,8 +976,8 @@ const LikeCache = (() => {
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-          LikeCache.mergeServer(ns, id, liked, likes); // [ADD]
-          const pref = LikeCache.get(ns, id);
+          LikeCache.mergeServer(viewerNS, id, liked, likes); // [ADD]
+          const pref = LikeCache.get(viewerNS, id);
           const L = (pref && pref.liked != null) ? pref.liked : liked;
           const C = (pref && typeof pref.likes === "number") ? pref.likes : likes;
           applyUI(id, L, C); 
@@ -1025,8 +1026,8 @@ const LikeCache = (() => {
       frag.appendChild(card);
             // [ADD] 캐시 우선: 페이지가 새로 뜨거나 돌아왔을 때도 사용자의 like 상태/카운트 유지
       try {
-        const ns = String(it.ns || (window.getNS ? getNS() : "default"));
-        const rec = LikeCache.get(ns, id);
+        const viewerNS = (window.getNS ? getNS() : "default");
+        const rec = LikeCache.get(viewerNS, id);
         if (rec) {
           // FEED 메모리 + UI 모두 갱신
           commit(id, rec.liked, (typeof rec.likes === "number" ? rec.likes : it.likes));
@@ -1246,7 +1247,7 @@ const LikeCache = (() => {
         : prevLiked;
       const nextLikes = (typeof likes === 'number') ? likes : (STATE.get(id)?.likes ?? null);
       commit(id, nextLiked, nextLikes);
-      try { if (isMineEvent) LikeCache?.set?.(ns, id, nextLiked, nextLikes); } catch {}
+      try { if (isMineEvent) LikeCache?.set?.(viewerNS(), id, nextLiked, nextLikes); } catch {}
     } catch {}
   };
 
@@ -1271,7 +1272,7 @@ const LikeCache = (() => {
     const optimisticLikes = Math.max(0, Number(prev.likes||0) + (wantLike ? 1 : -1));
     commit(id, wantLike, optimisticLikes);
     LAST.set(id, Date.now());
-    LikeCache.set(ns, id, wantLike, optimisticLikes);
+    LikeCache.set(viewerNS(), id, wantLike, optimisticLikes);
     bcNotifySelf("self:like", { id, ns, liked: wantLike, likes: optimisticLikes });
 
     // ② 서버 동기화 (+ 모순 스냅샷 무시)
@@ -1283,13 +1284,13 @@ const LikeCache = (() => {
       if (r && (r.liked != null || typeof r.likes === 'number')){
         const nextLiked = (r.liked != null) ? r.liked : wantLike;
         const nextLikes = (typeof r.likes === 'number') ? r.likes : optimisticLikes;
-        if (age > ttl || nextLiked === wantLike) commit(id, nextLiked, nextLikes);LikeCache.set(ns, id, nextLiked, nextLikes);
+        if (age > ttl || nextLiked === wantLike) { commit(id, nextLiked, nextLikes); LikeCache.set(viewerNS(), id, nextLiked, nextLikes); }
       } else {
         const s = await fetchSnapshot(id, ns);
         if (s && (s.liked != null || typeof s.likes === 'number')){
           const nextLiked = (s.liked != null) ? s.liked : wantLike;
           const nextLikes = (typeof s.likes === 'number') ? s.likes : optimisticLikes;
-          if (Date.now() - (LAST.get(id)||0) > 1200 || nextLiked === wantLike) commit(id, nextLiked, nextLikes);LikeCache.set(ns, id, nextLiked, nextLikes);
+          if (Date.now() - (LAST.get(id)||0) > 1200 || nextLiked === wantLike) { commit(id, nextLiked, nextLikes); LikeCache.set(viewerNS(), id, nextLiked, nextLikes); }
         }
       }
     } finally {
@@ -2643,7 +2644,7 @@ const LikeCache = (() => {
                 : Number(elCount.getAttribute('data-count') || elCount.dataset?.count || 0) || 0;
             }
             try { setFeedMemoryLike(id, liked, likes); updateLikeUIEverywhere(id, liked, likes); } catch {}
-            try { LikeCache?.set?.(ns, id, liked, likes); } catch {}
+            try { LikeCache?.set?.(viewerNS(), id, liked, likes); } catch {}
           }
         }
       } catch {}
