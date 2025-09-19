@@ -1967,7 +1967,6 @@ function goMineAfterShare(label = getLabel()) {
 
     return { id };
   }
-  fd.append("pad", String(safePad));
 
   async function requireLoginOrRedirect(){
     try{
@@ -2346,7 +2345,7 @@ function goMineAfterShare(label = getLabel()) {
       margin.addEventListener("input", applyMarginPX);
       window.addEventListener("resize", applyMarginPX);
       // 이미지 로드 후 초기 적용
-      img.addEventListener("load", applyMarginPX, { once: true });
+      stageImg.addEventListener("load", applyMarginPX, { once: true });
 
       right.append(acct, caption, meta, picker.el, marginGroup);
       body.append(left, right);
@@ -2484,7 +2483,7 @@ function goMineAfterShare(label = getLabel()) {
     margin.addEventListener("input", applyMarginPX);
     window.addEventListener("resize", applyMarginPX);
     // 이미지 로드 후 초기 적용
-    img.addEventListener("load", applyMarginPX, { once: true });
+    stageImg.addEventListener("load", applyMarginPX, { once: true });
 
     right.append(acct, caption, meta, picker.el, marginGroup);
 
@@ -2763,30 +2762,36 @@ function goMineAfterShare(label = getLabel()) {
   // 6) Mount Post Button (액션바 + POST 버튼)
   //    - CSS 클래스 위임. JS에서 레이아웃 인라인 지정하지 않음.
   // ─────────────────────────────────────────────────────────────
-  function mountPostButton() {
-    // 1) 이미 있는 버튼을 최우선으로 사용
-    let btn = document.getElementById('feed-open-btn') 
-          || document.querySelector('.feed-open-btn');
+  function mountPostButton(){
+    const wrap = document.getElementById('sdf-wrap');
+    const drawWrap = document.querySelector('.labelmine-draw-wrap') || wrap?.parentElement || document.querySelector('main.labelmine-body') || document.body;
+    if (!wrap || !drawWrap) return;
 
-    if (btn) {
-      // id만 보정 (있어도 클래스는 절대 건드리지 않음)
-      if (!btn.id) btn.id = 'feed-open-btn';
-    } else {
-      // 2) 없을 때만 새로 생성 (기본 모디파이어 포함)
+    let bar = drawWrap.querySelector('.sdf-actionbar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'sdf-actionbar';
+      drawWrap.insertBefore(bar, wrap);
+    }
+
+    let btn = document.getElementById('feed-open-btn');
+    if (!btn) {
       btn = document.createElement('button');
       btn.id = 'feed-open-btn';
       btn.type = 'button';
-      btn.className = 'feed-open-btn feed-open-btn--bottom'; // ← 유지!
+      btn.className = 'feed-open-btn';
       btn.textContent = 'POST';
-      document.body.appendChild(btn);
+    } else {
+      btn.classList.add('feed-open-btn');
+      btn.classList.remove('feed-open-btn--bottom');
     }
 
-    // 클릭 바인딩(중복 방지)
     if (!btn.dataset.bound) {
       btn.addEventListener('click', openFeedModal);
       btn.dataset.bound = '1';
       btn.setAttribute('aria-label', '새 게시물 만들기');
     }
+    if (btn.parentElement !== bar) bar.appendChild(btn);
   }
 
   // ─────────────────────────────────────────────────────────────
