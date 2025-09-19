@@ -300,6 +300,27 @@
     observeAvatars.__obs = obs;
   }
 
+  // 안전하게 좋아요 카운트를 그리드/모달에 반영 (값 있을 때만)
+  function __writeLikeCountInto(cardOrRoot, likes) {
+    if (typeof likes !== "number" || Number.isNaN(likes)) return; // 값 없으면 건드리지 않음
+    const root = (cardOrRoot instanceof Element) ? cardOrRoot : document;
+
+    const n = Math.max(0, likes);
+    const cnt = root.querySelector?.('[data-like-count]');
+    if (cnt) {
+      cnt.dataset.count = String(n);
+      try { cnt.textContent = (typeof fmtCount === 'function' ? fmtCount(n) : String(n)); } catch { cnt.textContent = String(n); }
+    }
+    const line = root.querySelector?.('.likes-line');
+    if (line) {
+      try {
+        line.innerHTML = `<span class="likes-count">${(typeof fmtInt==='function'? fmtInt(n) : String(n))}</span> ${(typeof likeWordOf==='function'? likeWordOf(n) : (n<=1?'like':'likes'))}`;
+      } catch {
+        line.textContent = `${n} ${n<=1?'like':'likes'}`;
+      }
+    }
+  }
+
   // (선택) 다른 스크립트에서도 쓸 수 있게 노출
   try { window.Avatar = Avatar; } catch {}
 
@@ -844,17 +865,25 @@ const LikeCache = (() => {
   // 같은 id의 카드를 문서 내 전체에서 일괄 갱신 (모달/그리드 동시 반영)
   function updateLikeUIEverywhere(id, liked, likes){
     const sel = `.feed-card[data-id="${CSS.escape(String(id))}"]`;
-    document.querySelectorAll(sel).forEach((card) => {
-      const cnt = card.querySelector('[data-like-count]');
-      if (cnt) { cnt.dataset.count = String(Math.max(0, likes)); cnt.textContent = fmtCount(likes); }
-      const line = card.querySelector('.likes-line');
-      if (line) line.innerHTML = `<span class="likes-count">${fmtInt(likes)}</span> ${likeWordOf(likes)}`;
-      const btn = card.querySelector('.btn-like');
-      if (btn) {
-        btn.setAttribute('aria-pressed', String(!!liked));
-        (window.setHeartVisual ? window.setHeartVisual(btn, !!liked)
-                                : btn.classList.toggle('is-liked', !!liked));
-      }
+    const cards = document.querySelectorAll(sel);
+    if (!cards.length) return;
+    // 한 프레임에 모아 쓰기
+    (window.requestAnimationFrame || setTimeout)(() => {
+      cards.forEach((card) => {
+        // 카운트는 '숫자일 때만' 갱신 (값 없으면 유지)
+        __writeLikeCountInto(card, likes);
+        if (typeof liked === 'boolean') {
+          const btn = card.querySelector('.btn-like');
+          if (btn) {
+            btn.setAttribute('aria-pressed', String(!!liked));
+            (window.setHeartVisual ? window.setHeartVisual(btn, !!liked)
+                                    : btn.classList.toggle('is-liked', !!liked));
+          }
+          // 읽기전용 그리드 하트 비주얼도 동기화
+          const ro = card.querySelector('.stat[data-like-readonly] svg');
+          if (ro && window.setHeartVisual) window.setHeartVisual(ro, !!liked);
+        }
+      });
     });
   }
 
@@ -1209,13 +1238,16 @@ const LikeCache = (() => {
     if (typeof likes === 'number')  st.likes = Math.max(0, likes);
     STATE.set(id, st);
 
-    // 전역 UI 동기화 (그리드/모달)
-    if (typeof window.updateLikeUIEverywhere === 'function') {
-      window.updateLikeUIEverywhere(id, st.liked, st.likes);
-    } else {
-      // 매우 레거시 페이지용(해당 id 카드들 직접 갱신)
-      document.querySelectorAll(`.feed-card[data-id="${CSS.escape(String(id))}"]`).forEach(card => writeInto(card, st.liked, st.likes));
-    }
+    const run = () => {
+      if (typeof window.updateLikeUIEverywhere === 'function') {
+        window.updateLikeUIEverywhere(id, st.liked, st.likes);
+      } else {
+        document
+          .querySelectorAll(`.feed-card[data-id="${CSS.escape(String(id))}"]`)
+          .forEach(card => { __writeLikeCountInto(card, st.likes); writeInto(card, st.liked, st.likes); });
+      }
+    };
+    (window.requestAnimationFrame || setTimeout)(run);
   }
 
     // [PATCH #3] 실시간 like 이벤트의 모순 스냅샷 1.2s 차단
