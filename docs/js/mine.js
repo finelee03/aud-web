@@ -2219,7 +2219,14 @@ try {
           window.dispatchEvent(new CustomEvent("user:updated", { detail: snap }));
         }
       } catch {}
-      try { if (__ME_ID) localStorage.setItem("auth:userns", String(__ME_ID).toLowerCase()); } catch {}
+      try {
+        const ns = String(__ME_ID||"").toLowerCase();
+        sessionStorage.setItem("auth:userns:session", ns);  // ← 세션(탭) 고정
+        // (레거시 페이지 호환이 꼭 필요하면) localStorage는 유지해도 되지만,
+        // 다계정/다탭 동시 사용 시엔 생략하는 게 안전합니다.
+        // localStorage.setItem("auth:userns", ns);
+        window.dispatchEvent(new CustomEvent("store:ns-changed", { detail: ns }));
+      } catch {}
       migrateMineOnlyFlagToNS();
       if (!flagged) setAuthedFlag();
       idle(() => rehydrateFromLocalStorageIfSessionAuthed());

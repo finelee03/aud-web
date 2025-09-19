@@ -19,6 +19,8 @@ const GUEST_BUS_KEY = "guest:bus";
 
 const AUTO_MIGRATE_GUEST_TO_USER = false;
 
+const SESSION_USER_NS_KEY = "auth:userns:session";
+
 /* ── auth 세션 플래그: 탭 생존 동안 유지 ───────────────────*/
 const AUTH_FLAG_KEY = "auth:flag";
 function hasAuthedFlag(){ try{ return sessionStorage.getItem(AUTH_FLAG_KEY) === "1"; }catch{ return false; } }
@@ -165,20 +167,30 @@ window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
   function refreshNS(){
     try{
       const next = (function(){
+        // 인증 안되면 default
         try { if (!(hasAuthedFlag() || (window.auth?.isAuthed?.()))) return "default"; } catch {}
-        try{
+        // 세션(탭) NS 우선
+        try {
+          const ss = sessionStorage.getItem(SESSION_USER_NS_KEY);
+          if (ss && ss.trim()) return ss.trim().toLowerCase();
+        } catch {}
+        // 폴백: 레거시 전역 NS
+        try {
           const ns = localStorage.getItem("auth:userns");
-          if (ns && typeof ns === "string" && ns.trim()) return ns.trim().toLowerCase();
-        }catch{}
+          if (ns && ns.trim()) return ns.trim().toLowerCase();
+        } catch {}
         return "default";
       })();
+
       if (next === last) return;
+
       const from = last;
       USER_NS = next;
       window.__STORE_NS = USER_NS;
       recalcKeys();
       migrateIfNeeded(from, USER_NS);
       last = USER_NS;
+
       try { window.dispatchEvent(new CustomEvent("store:ns-changed", { detail: USER_NS })); } catch {}
       try { rebindNS(); } catch {}
     }catch{}
@@ -189,8 +201,19 @@ window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
 
   // storage 이벤트로 감지 (다른 탭/윈도우 포함)
   window.addEventListener("storage", (e) => {
-    if (!e.key) return;
-    if (e.key === "auth:userns" || e.key === "auth:flag") refreshNS();
+    if (!e?.key) return;
+
+    // auth:flag 변화는 항상 반영
+    if (e.key === "auth:flag") { refreshNS(); return; }
+
+    // ⚠️ 다른 탭이 바꾼 전역 auth:userns는,
+    // 이 탭이 이미 세션 NS를 갖고 있으면 '무시' (크로스-계정 간섭 차단)
+    if (e.key === "auth:userns") {
+      try {
+        if (sessionStorage.getItem(SESSION_USER_NS_KEY)) return;
+      } catch {}
+      refreshNS();
+    }
   });
 
   // [ADD] 인사이트 캐시 정리 유틸 (NS 바뀌거나 로그아웃 시 호출 추천)
@@ -213,6 +236,12 @@ window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
 
   // 현재 탭 내 로그인 로직에서 커스텀 이벤트로 알림 가능
   window.addEventListener("auth:changed", refreshNS);
+
+  function setSessionUserNS(ns){
+    try { sessionStorage.setItem(SESSION_USER_NS_KEY, String(ns||"").toLowerCase()); } catch {}
+    try { window.dispatchEvent(new CustomEvent("store:ns-changed", { detail: String(ns||"").toLowerCase() })); } catch {}
+  }
+  window.setSessionUserNS = setSessionUserNS;
 })();
 
 
@@ -232,11 +261,21 @@ function openBC(name){
 bc = openBC(BC_NAME);
 
 function getUserNS(){
+  // 인증 안됐으면 항상 default
   try { if (!(hasAuthedFlag() || (window.auth?.isAuthed?.()))) return "default"; } catch {}
-  try{
+
+  // 1순위: 세션(탭) 스코프 NS
+  try {
+    const ss = sessionStorage.getItem(SESSION_USER_NS_KEY);
+    if (ss && ss.trim()) return ss.trim().toLowerCase();
+  } catch {}
+
+  // 2순위: 레거시 폴백 (다른 탭과 공유됨)
+  try {
     const ns = localStorage.getItem("auth:userns");
-    if (ns && typeof ns === "string" && ns.trim()) return ns.trim().toLowerCase();
-  }catch{}
+    if (ns && ns.trim()) return ns.trim().toLowerCase();
+  } catch {}
+
   return "default";
 }
 
@@ -1091,12 +1130,20 @@ function rebindNS(){
   const prev = (typeof USER_NS !== "undefined" ? USER_NS : "default");
 
   const next = (()=>{
-    try{
-      return (window.auth?.isAuthed?.())
-        ? (localStorage.getItem("auth:userns") || "default").toLowerCase()
-        : "default";
-    }catch{ return "default"; }
+    try { if (!(window.auth?.isAuthed?.())) return "default"; } catch { return "default"; }
+
+    // 세션(탭) NS 우선
+    try {
+      const ss = sessionStorage.getItem(SESSION_USER_NS_KEY);
+      if (ss && ss.trim()) return ss.trim().toLowerCase();
+    } catch {}
+
+    // 폴백: 전역 NS
+    try {
+      return (localStorage.getItem("auth:userns") || "default").toLowerCase();
+    } catch { return "default"; }
   })();
+
   if (next === USER_NS) return;
 
   // ★ 이전 NS 세션 흔적 제거
