@@ -115,6 +115,8 @@
     const t = await csrf.ensure(true);
     const headers = new Headers({ "Content-Type": "application/json", "Accept": "application/json" });
     if (t) {
+      headers.set("x-csrf-token", t); 
+      headers.set("X-XSRF-Token", t);  
     }
     const u = new URL(url, location.href);
     if (t && !u.searchParams.has("_csrf")) u.searchParams.set("_csrf", t);
@@ -202,6 +204,7 @@
       "RATE_LIMIT":      { msg: "Too many attempts. Please wait a moment and try again.", field: "pw"    },
       "CSRF":            { msg: "Security token expired. Please refresh and try again.",  field: "pw"    },
       "EXPIRED_SESSION": { msg: "Session expired. Please sign in again.",                 field: "pw"    },
+      "DUPLICATE_EMAIL": { msg: "This email is already registered." },
     };
     return M[code] || { msg: "Login failed. Please check your email and password.", field: "pw" };
   }
@@ -221,7 +224,7 @@
     const pw1   = (els.signupPw?.value    || "").trim();
     const pw2   = (els.signupPw2?.value   || "").trim();
     if (!EMAIL_RX.test(email)) return { ok:false, msg:"Please enter a valid email address." };
-    if (pw1.length < 6)        return { ok:false, msg:"Password must be at least 6 characters." };
+    if (pw1.length < 8)        return { ok:false, msg:"Password must be at least 8 characters." };
     if (pw1 !== pw2)           return { ok:false, msg:"Passwords do not match." };
     return { ok:true, email, pw1, pw2 };
   }

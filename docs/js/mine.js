@@ -2925,5 +2925,134 @@ const LikeCache = (() => {
     // 3) NS가 바뀌면 캐시 분리 — store.js가 이벤트를 쏴줌
     window.addEventListener("store:ns-changed", ()=>{/* no-op: 키가 ns별이라 충돌 없음 */});
   })();
+  // === [ADD] Received Hearts (likes "received" on my posts) ===================
+  (() => {
+    const $ = (s, r=document) => r.querySelector(s);
+    const TTL = 10 * 60 * 1000; // 10분 캐시
+    const KEY = (ns) => `receivedHearts:${ns}`;
+    const MAP_KEY = (ns) => `receivedHearts:itemLabelMap:${ns}`; // itemId -> label (증분 갱신용)
+
+    const getNS = (window.getNS) ? window.getNS : () => {
+      try { return (localStorage.getItem("auth:userns") || "default").trim().toLowerCase(); }
+      catch { return "default"; }
+    };
+    const api = (p,o)=> (window.auth?.apiFetch ? window.auth.apiFetch(p,o) : fetch(p,o||{}));
+
+    // mine.js의 fetchAllMyItems 재사용 (위에 이미 정의됨)
+    async function fetchAllMyItems(maxPages=20, pageSize=60){
+      if (window.mineInsights && window.mineInsights._compute) {
+        // 위쪽에 이미 동일 함수가 있으므로 중복 정의 피하기 위해 그걸 씁니다.
+      }
+      const out=[]; let cursor=null; const ns=getNS();
+      for (let p=0; p<maxPages; p++){
+        const qs=new URLSearchParams({ limit: String(Math.min(pageSize,60)), ns });
+        if (cursor){ qs.set("after",String(cursor)); qs.set("cursor",String(cursor)); }
+        const r = await api(`/api/gallery/public?${qs}`, { credentials:"include" });
+        if (!r || !r.ok) break;
+        const j = await r.json().catch(()=>({}));
+        const items = Array.isArray(j?.items) ? j.items : [];
+        items.forEach(it => {
+          const mine = it?.mine === true
+            || String(it?.ns||"").toLowerCase()===ns
+            || String(it?.owner?.ns||"").toLowerCase()===ns;
+          if (mine) out.push(it);
+        });
+        cursor = j?.nextCursor || null;
+        if (!cursor || items.length===0) break;
+      }
+      return out;
+    }
+
+    function readCache(ns, ttl=TTL){
+      try {
+        const raw = sessionStorage.getItem(KEY(ns)); if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (!obj?.t) return null;
+        if (ttl>0 && (Date.now()-obj.t) > ttl) return null;
+        return obj;
+      } catch { return null; }
+    }
+    function writeCache(ns, data, itemLabelMap){
+      try {
+        sessionStorage.setItem(KEY(ns), JSON.stringify({ ...data, t: Date.now() }));
+        if (itemLabelMap) sessionStorage.setItem(MAP_KEY(ns), JSON.stringify(itemLabelMap));
+      } catch {}
+    }
+    function invalidate(ns){ try{ sessionStorage.removeItem(KEY(ns)); }catch{} }
+
+    async function compute(){
+      const ns = getNS();
+      const mineItems = await fetchAllMyItems();
+      const perLabel = { thump:0, miro:0, whee:0, track:0, echo:0, portal:0 };
+      const id2label = {};
+      let total = 0;
+
+      for (const it of mineItems){
+        const lb = String(it.label || '').trim();
+        const likes = Math.max(0, Number(it.likes || 0));
+        if (perLabel[lb] == null) perLabel[lb] = 0; // 라벨이 비었거나 신규라면 0부터
+        perLabel[lb] += likes;
+        total += likes;
+        if (it.id) id2label[String(it.id)] = lb;
+      }
+      return { total, perLabel, id2label };
+    }
+
+    async function get(opts={}){
+      const ns = getNS();
+      const cached = readCache(ns, opts.maxAge ?? TTL);
+      if (cached) return cached;
+      const { total, perLabel, id2label } = await compute();
+      writeCache(ns, { total, perLabel }, id2label);
+      // 소비자에게 알림(선택): hearts:received
+      try { window.dispatchEvent(new CustomEvent("hearts:received", { detail:{ ns, total, perLabel } })); } catch {}
+      return { total, perLabel, t: Date.now() };
+    }
+
+    // 실시간 좋아요 이벤트가 오면 캐시 무효화 (재계산하여 '받은' 수 반영)
+    function hookInvalidators(){
+      const ns = getNS();
+
+      // socket.io
+      try {
+        const s = (typeof ensureSocket === 'function') ? ensureSocket() : null;
+        if (s && !hookInvalidators.__sock) {
+          hookInvalidators.__sock = true;
+          s.on("item:like", (p) => {
+            // 내 게시물인지 판정(간단히 owner.ns == 내 ns)
+            const ownerNS = String(p?.owner?.ns || p?.ns || "").toLowerCase();
+            if (ownerNS && ownerNS === ns) invalidate(ns);
+          });
+        }
+      } catch {}
+
+      // BroadcastChannel (다른 탭)
+      try {
+        if (window.__bcFeed && !hookInvalidators.__bc) {
+          hookInvalidators.__bc = true;
+          window.__bcFeed.addEventListener("message", (e) => {
+            const m = e?.data; if (!m || m.kind !== (window.FEED_EVENT_KIND || "feed:event")) return;
+            const type = m?.payload?.type;
+            const data = m?.payload?.data;
+            if (type === "item:like") {
+              const ownerNS = String(data?.owner?.ns || data?.ns || "").toLowerCase();
+              if (ownerNS && ownerNS === ns) invalidate(ns);
+            }
+            if (type === "item:removed") {
+              // 내 글 삭제 시에도 합계 변동 → 무효화
+              invalidate(ns);
+            }
+          });
+        }
+      } catch {}
+
+      // 로그인/NS 변경 시 분리 캐시 유지(무효화는 필요 X)
+      window.addEventListener("store:ns-changed", ()=>{/* ns별 키라 충돌 없음 */});
+    }
+    hookInvalidators();
+
+    // 공개 API
+    window.mineHearts = { get, _compute: compute };
+  })();
 
 })();

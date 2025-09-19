@@ -739,8 +739,8 @@
       items.forEach((it) => {
         const nsMatch   = String(it?.ns || "").toLowerCase() === myns;
         const mineFlag  = (it?.mine === true);
-        const ownerMatch= String(it?.owner?.ns || "").toLowerCase() === myns;
-        if (nsMatch || mineFlag || ownerMatch) out.push(it);
+        const ownerMatch= String(it?.user?.id || "").toLowerCase() === myns; // (옵션)
+        if (nsMatch || mineFlag) out.push(it);
       });
 
       cursor = j?.nextCursor || null;

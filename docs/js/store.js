@@ -77,6 +77,16 @@ window.addEventListener("beforeunload", () => { __flushSnapshot({ server: true }
 
 // PATCH: add near other small helpers
 function readHeartsMap(){ return loadHearts(); }
+// 내가 '받은' 하트 집계(라벨별) 읽기 — mine.js가 계산/캐시해 둔 값을 사용
+function readReceivedHeartsMap(){
+  try {
+    const ns = (typeof getUserNS === 'function' ? getUserNS() : 'default');
+    const raw = sessionStorage.getItem(`receivedHearts:${ns}`);
+    const obj = raw ? JSON.parse(raw) : null;
+    return (obj && obj.perLabel) ? obj.perLabel : null; // { thump: n, miro: n, ... }
+  } catch { return null; }
+}
+window.readReceivedHeartsMap = readReceivedHeartsMap;
 
 
 /* ────────────────────────────────────────────────────────────

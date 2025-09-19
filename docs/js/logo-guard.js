@@ -8,7 +8,9 @@
     try {
       const u = new URL(p, location.href);
       if (API_ORIGIN && /^\/(?:auth|api)\//.test(u.pathname)) {
-        return new URL(u.pathname + u.search + u.hash, API_ORIGIN).toString();
+        const t = new URL(API_ORIGIN);
+        t.pathname = u.pathname; t.search = u.search; t.hash = u.hash;
+        return t.toString();
       }
       return u.toString();
     } catch { return p; }
@@ -27,7 +29,10 @@
   const AUTH_FLAG_KEY = "auth:flag";
   const FORCE_SAME_TAB = true;
 
-  const absURL = (rel) => new URL(rel, location.href).toString();
+  const absURL = (rel) => {
+    try { return new URL(rel, location.href).toString(); }
+    catch { return rel; }
+  };
 
   // 404 안 남기는 조용한 nav-ping (중복 방지 + 로컬 호스트는 생략)
   let __navPingOnce = false;
@@ -75,6 +80,7 @@
         };
       };
       patch("assign"); patch("replace");
+      if (Location.prototype) Location.prototype.__audPatchedNav = true; // ← 추가
     } catch {}
   })();
 
@@ -92,33 +98,36 @@
   function attachClickGuard(a) {
     if (!a || a.dataset.logoGuard === "1") return;
     a.dataset.logoGuard = "1";
+
     if (FORCE_SAME_TAB) a.setAttribute("target", "_self");
+    // 비-앵커도 지원
+    if (a.tagName !== "A") {
+      a.setAttribute("role", "link");
+      if (!a.hasAttribute("tabindex")) a.tabIndex = 0;
+      a.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); a.click(); }
+      }, { capture: true });
+    }
 
     a.addEventListener("click", (e) => {
       if (!FORCE_SAME_TAB && (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1)) return;
       e.preventDefault();
       try { history.scrollRestoration = "manual"; } catch {}
 
-      // 내부 이동 마킹
       try {
         window.auth?.markNavigate?.();
         sessionStorage.setItem(NAV_KEY, String(Date.now()));
       } catch {}
 
-      // 인증 세션인 경우에만 flag 보정(게스트는 승격하지 않음)
       try {
         if (window.auth?.isAuthed?.()) {
           sessionStorage.setItem(AUTH_FLAG_KEY, "1");
         } else if (sessionStorage.getItem(AUTH_FLAG_KEY) === "1") {
-          // 이미 1이면 유지(덮어쓰기)
           sessionStorage.setItem(AUTH_FLAG_KEY, "1");
         }
       } catch {}
 
-      // 서버 힌트는 조용히
       navPingSilent();
-
-      // 항상 같은 탭에서 mine으로
       location.assign(computeLogoDest());
     }, { capture: true });
   }

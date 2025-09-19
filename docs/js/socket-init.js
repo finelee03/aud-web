@@ -45,14 +45,22 @@
 
     // ---- 구독 상태는 connect 핸들러보다 먼저 선언 (TDZ 레이스 방지) ----
     const subscribed = new Set();
+    const subscribedItems = new Set();
 
     function resubscribeAll() {
-      if (!subscribed.size) return;
-      const labels = Array.from(subscribed);
       try {
-        sock.emit("subscribe", { labels }, (ack) => {
-          if (ack && ack.ok === false) console.warn("[socket-init] resubscribe failed", ack);
-        });
+        const labels = Array.from(subscribed);
+        if (labels.length) {
+          sock.emit("subscribe", { labels }, (ack) => {
+            if (ack && ack.ok === false) console.warn("[socket-init] resubscribe(labels) failed", ack);
+          });
+        }
+        const items = Array.from(subscribedItems);
+        if (items.length) {
+          sock.emit("subscribe", { items }, (ack) => {
+            if (ack && ack.ok === false) console.warn("[socket-init] resubscribe(items) failed", ack);
+          });
+        }
       } catch {}
     }
 
@@ -105,6 +113,45 @@
       if (!subscribed.size) return;
       const arr = Array.from(subscribed);
       subscribed.clear();
+      try {
+        sock.emit("unsubscribe", { labels: arr }, (ack) => {
+          if (ack && ack.ok === false) console.warn("[socket-init] unsubscribeAll failed", ack);
+        });
+      } catch {}
+    };
+
+    // items 전용 헬퍼
+    window.sockSubscribeItems = function (items) {
+      const arr = normalizeLabels(items);
+      if (!arr.length) return;
+      arr.forEach((id) => subscribedItems.add(id));
+      try {
+        sock.emit("subscribe", { items: arr }, (ack) => {
+          if (ack && ack.ok === false) console.warn("[socket-init] subscribe(items) failed", ack);
+        });
+      } catch {}
+    };
+
+    window.sockUnsubscribeItems = function (items) {
+      const arr = normalizeLabels(items);
+      if (!arr.length) return;
+      arr.forEach((id) => subscribedItems.delete(id));
+      try {
+        sock.emit("unsubscribe", { items: arr }, (ack) => {
+          if (ack && ack.ok === false) console.warn("[socket-init] unsubscribe(items) failed", ack);
+        });
+      } catch {}
+    };
+
+    window.sockUnsubscribeAllItems = function () {
+      if (!subscribedItems.size) return;
+      const arr = Array.from(subscribedItems);
+      subscribedItems.clear();
+      try {
+        sock.emit("unsubscribe", { items: arr }, (ack) => {
+          if (ack && ack.ok === false) console.warn("[socket-init] unsubscribeAll(items) failed", ack);
+        });
+      } catch {}
     };
 
     // ---- 필요하다면 탭 종료 시 연결 정리 ----
