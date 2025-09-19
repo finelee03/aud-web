@@ -30,9 +30,49 @@
   const EVT_LABEL      = (window.LABEL_COLLECTED_EVT || "label:collected-changed");
   const EVT_JIB        = (window.JIB_COLLECTED_EVT   || "jib:collection-changed");
 
-  // Auth helpers (no-op safe)
-  const ensureCSRF = window.auth?.ensureCSRF || (async () => {});
-  const withCSRF   = window.auth?.withCSRF   || (async (opt) => opt);
+  // [교체] CSRF & API 라우팅 유틸
+  async function ensureCSRF(){
+    try{
+      if (window.auth?.getCSRF) return await window.auth.getCSRF();
+      const r = await fetch('/auth/csrf', { credentials:'include', cache:'no-store' });
+      const j = await r.json().catch(()=>({}));
+      return j?.csrfToken || null;
+    }catch{ return null; }
+  }
+  async function withCSRF(opt = {}) {
+    const t = await ensureCSRF();
+    const headers = new Headers(opt.headers || {});
+    if (t) {
+      headers.set('X-CSRF-Token', t);
+      headers.set('X-XSRF-TOKEN', t);
+    }
+    return { ...opt, headers };
+  }
+  const API_ORIGIN = window.PROD_BACKEND || window.API_BASE || window.API_ORIGIN || null;
+  const toAPI = (p) => {
+    try {
+      const u = new URL(p, location.href);
+      return (API_ORIGIN && /^\/(api|auth)\//.test(u.pathname))
+        ? new URL(u.pathname + u.search + u.hash, API_ORIGIN).toString()
+        : u.toString();
+    } catch { return p; }
+  };
+
+  // [수정] 기존 api()를 toAPI를 쓰도록 바꿈 (401 처리 로직은 유지)
+  async function api(path, opt = {}) {
+    const fn = window.auth?.apiFetch || fetch;
+    const url = toAPI(path);
+    try {
+      const res = await fn(url, opt);
+      if (res && res.status === 401) {
+        try { sessionStorage.removeItem("auth:flag"); } catch {}
+        return null;
+      }
+      return res;
+    } catch {
+      return null;
+    }
+  }
 
   // In-memory state
   let MY_UID   = null;
@@ -43,6 +83,87 @@
   const normalizeId = (v) => String(v ?? "").trim().toLowerCase();
   const dedupList   = (arr) => Array.isArray(arr) ? [...new Set(arr.map(normalizeId).filter(Boolean))] : [];
   const uniqueCount = (arr) => dedupList(arr).length;
+
+
+  // === PAD / BG utils ==================================================
+  function clampPadPct(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(50, Math.round(n)));
+  }
+
+  function normHex(hex) {
+    let s = String(hex || '').trim();
+    if (!s) return null;
+    // #abc → #aabbcc
+    if (/^#([0-9a-f]{3})$/i.test(s)) {
+      s = s.replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i, (_, a, b, c) => `#${a}${a}${b}${b}${c}${c}`);
+    }
+    return /^#([0-9a-f]{6})$/i.test(s) ? s.toLowerCase() : null;
+  }
+
+  // 시스템 라이트/다크에 따라 기본 배경 후보
+  function defaultCanvasBG() {
+    try {
+      const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return dark ? '#0b0b0b' : '#ffffff';
+    } catch { return '#ffffff'; }
+  }
+
+  // 이미지 -> 캔버스 굽기 (패딩%와 배경 적용)
+  // - padPct: 0~50 (콘텐츠를 그만큼 축소하고, 캔버스는 확장됨)
+  // - bgHex: null이면 투명 캔버스(정말 투명), 문자열이면 해당 배경으로 채움
+  // - mime: 'image/webp' 권장(작고 빠름). 투명 유지 필요+Safari면 'image/png'도 OK.
+  async function bakeWithPadBG(file, padPct = 0, bgHex = null, mime = 'image/webp', quality = 0.92) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = url;
+      });
+
+      const srcW = img.naturalWidth || img.width;
+      const srcH = img.naturalHeight || img.height;
+      if (!srcW || !srcH) throw new Error('invalid-image');
+
+      const p = clampPadPct(padPct);
+      const innerScale = 1 - (p * 2) / 100;            // 콘텐츠가 차지하는 비율
+      const outW = Math.round(srcW / (innerScale || 1));
+      const outH = Math.round(srcH / (innerScale || 1));
+      const dx = Math.round((outW - srcW) / 2);
+      const dy = Math.round((outH - srcH) / 2);
+
+      const cnv = document.createElement('canvas');
+      cnv.width = outW;
+      cnv.height = outH;
+      const ctx = cnv.getContext('2d', { alpha: bgHex == null });
+
+      if (bgHex) {
+        ctx.fillStyle = bgHex;
+        ctx.fillRect(0, 0, outW, outH);
+      }
+
+      // 고해상도에서도 선명하게
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, dx, dy, srcW, srcH);
+
+      // Safari/WebView 호환: webp 불가 시 png로 폴백
+      let outMime = mime;
+      if (!cnv.toDataURL('image/webp').startsWith('data:image/webp')) {
+        outMime = 'image/png';
+      }
+
+      const blob = await new Promise((res) => cnv.toBlob(res, outMime, quality));
+      if (!blob) throw new Error('toBlob-failed');
+
+      return { blob, width: outW, height: outH, mime: outMime };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
 
   /**
    * Any → string[] (IDs). Accepts common shapes & coerces into de-duplicated IDs.
@@ -361,20 +482,6 @@
   const hasAuthedFlag = () => sessionStorage.getItem("auth:flag") === "1";
   const serverAuthed  = () => !!(window.auth?.isAuthed && window.auth.isAuthed());
   const sessionAuthed = () => hasAuthedFlag() || serverAuthed();
-
-  async function api(path, opt = {}) {
-    const fn = window.auth?.apiFetch || fetch;
-    try {
-      const res = await fn(path, opt);
-      if (res && res.status === 401) {
-        try { sessionStorage.removeItem("auth:flag"); } catch {}
-        return null;
-      }
-      return res;
-    } catch {
-      return null;
-    }
-  }
 
   async function fetchMe() {
     const r = await api("/auth/me", { credentials: "include", cache: "no-store" });
@@ -1284,6 +1391,106 @@
     }
   }
 
+
+  /* ─────────────────────────────────────────────────────────────────────────────
+  * 8.5) Uploader (image post)
+  * ──────────────────────────────────────────────────────────────────────────── */
+
+  // 전역 보관용(미리보기/업로드 공용)
+  let __originalFile = null;
+
+  // 엔드포인트 호환 업로드
+  async function postItem(formData){
+    let r = await api('/api/items', await withCSRF({ method:'POST', body: formData, credentials:'include' }));
+    if (r?.ok) return r;
+    r = await api('/api/gallery', await withCSRF({ method:'POST', body: formData, credentials:'include' }));
+    if (r?.ok) return r;
+    r = await api('/api/upload', await withCSRF({ method:'POST', body: formData, credentials:'include' }));
+    return r;
+  }
+
+  // pad/bg 읽기 (엘리먼트가 없으면 기본값)
+  function currentPad() {
+    const el = document.querySelector('#pad-pct');
+    return clampPadPct(el?.value ?? 0);
+  }
+  function currentBG() {
+    const v = (document.querySelector('#bg-hex')?.value || '').trim();
+    if (!v) return null; // 투명
+    return normHex(v) || defaultCanvasBG();
+  }
+
+  // 미리보기
+  async function renderPreview() {
+    const $preview = document.querySelector('#preview');
+    if (!__originalFile || !$preview) return;
+    try {
+      const { blob } = await bakeWithPadBG(__originalFile, currentPad(), currentBG());
+      const url = URL.createObjectURL(blob);
+      $preview.src = url;
+      if (renderPreview.__prevURL) URL.revokeObjectURL(renderPreview.__prevURL);
+      renderPreview.__prevURL = url;
+    } catch (e) {
+      console.warn('preview failed', e);
+    }
+  }
+
+  // 업로드 핸들러
+  async function handleUpload(e){
+    e?.preventDefault?.();
+
+    if (!__originalFile) { alert('이미지를 선택해 주세요.'); return; }
+    const pad = currentPad();
+    const bg  = currentBG();
+
+    let baked;
+    try {
+      baked = await bakeWithPadBG(__originalFile, pad, bg, 'image/webp', 0.92);
+    } catch (err) {
+      console.warn('bake failed, fallback to original', err);
+      baked = { blob: __originalFile, mime: __originalFile.type || 'application/octet-stream' };
+    }
+
+    const fd = new FormData();
+    fd.append('file', baked.blob, `post.${baked.mime?.includes('png') ? 'png' : 'webp'}`);
+
+    const $caption = document.querySelector('#caption');
+    const $label   = document.querySelector('#label');
+    if ($caption?.value) fd.append('caption', $caption.value);
+    if ($label?.value)   fd.append('label', String($label.value).trim());
+
+    fd.append('pad', String(pad));
+    if (bg) fd.append('bg', bg);
+
+    try {
+      const ns = (localStorage.getItem('auth:userns') || '').trim().toLowerCase();
+      if (ns) fd.append('ns', ns);
+    } catch {}
+
+    const btn = document.querySelector('#btn-upload');
+    try { btn && (btn.disabled = true); } catch {}
+    let res;
+    try {
+      res = await postItem(fd);
+    } catch (err) {
+      console.error(err);
+      alert('업로드 중 오류가 발생했습니다.');
+      btn && (btn.disabled = false);
+      return;
+    }
+    btn && (btn.disabled = false);
+
+    if (!res || !res.ok) {
+      let msg = '업로드에 실패했습니다.';
+      try { const j = await res?.json?.(); if (j?.error) msg = `${msg}\n${j.error}`; } catch {}
+      alert(msg);
+      return;
+    }
+
+    try { window.auth?.markNavigate?.(); } catch {}
+    location.assign('./mine.html'); // 필요시 원하는 경로로 변경
+  }
+
   /* ─────────────────────────────────────────────────────────────────────────────
    * 9) Reactive resync hooks for late-ready stores
    * ──────────────────────────────────────────────────────────────────────────── */
@@ -1419,6 +1626,44 @@
     // 7) UI handlers
     $("#btn-edit")?.addEventListener("click", () => { try { window.auth?.markNavigate?.(); } catch {} openEditModal(); });
     $("#me-avatar")?.addEventListener("click", () => { try { window.auth?.markNavigate?.(); } catch {} openAvatarCropper(); });
+   
+    // === Upload UI bindings ===
+    {
+      const $file    = document.querySelector('#file');
+      const $pad     = document.querySelector('#pad-pct');
+      const $bg      = document.querySelector('#bg-hex');
+      const $form    = document.querySelector('#upload-form');
+      const $btnUp   = document.querySelector('#btn-upload');
+
+      if ($file && !$file.__bound) {
+        $file.__bound = true;
+        $file.addEventListener('change', async () => {
+          const f = $file.files && $file.files[0];
+          if (!f) return;
+          __originalFile = f;
+          await renderPreview();
+        });
+      }
+      if ($pad && !$pad.__bound) {
+        $pad.__bound = true;
+        $pad.addEventListener('input', renderPreview);
+      }
+      if ($bg && !$bg.__bound) {
+        $bg.__bound = true;
+        $bg.addEventListener('input', renderPreview);
+      }
+      if ($btnUp && !$btnUp.__bound) {
+        $btnUp.__bound = true;
+        $btnUp.addEventListener('click', handleUpload);
+      }
+      if ($form && !$form.__bound) {
+        $form.__bound = true;
+        $form.addEventListener('submit', handleUpload);
+      }
+
+      // 페이지 진입 시 파일이 이미 선택돼 있으면 미리보기
+      if ($file?.files?.[0]) { __originalFile = $file.files[0]; renderPreview(); }
+    }
 
     // 8) notifications & sockets
     setupNotifyUI();

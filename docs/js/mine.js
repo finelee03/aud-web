@@ -731,6 +731,40 @@
       filter:none !important; mix-blend-mode:normal !important; opacity:1 !important;
     }`);
   }
+  
+  // === MEDIA padding/bg 규칙 주입기 =========================================
+  function ensureMediaPadCSS(){
+    if (ensureMediaPadCSS.__done) return; ensureMediaPadCSS.__done = true;
+
+    function writable(s){ try{ if (s.href){ const u=new URL(s.href,location.href); if(u.origin!==location.origin) return false; } void s.cssRules; return true; } catch { return false; } }
+    let sheet = null;
+    try {
+      const list = Array.from(document.styleSheets || []);
+      sheet = list.find(s => writable(s) && /\/mine\.css(\?|$)/.test(s.href || "")) ||
+              list.find(s => writable(s)) || null;
+    } catch {}
+    if (!sheet) {
+      const tag = document.createElement("style");
+      tag.id = "mine-media-pad-rules";
+      document.head.appendChild(tag);
+      sheet = tag.sheet;
+    }
+    const add = (r) => { try { sheet.insertRule(r, sheet.cssRules.length); } catch {} };
+
+    // 여백/배경/라운드 + 이미지 contain
+    add(`.feed-card .media, .pm-left .media{
+      background: var(--bg, transparent);
+      padding: var(--pad, 0%);
+      border-radius: 12px;
+    }`);
+    add(`.feed-card .media img, .pm-left .media img{
+      display:block;
+      width:100%;
+      height:auto;
+      object-fit: contain;
+      background: transparent;
+    }`);
+  }
 
   // 전역 노출(다른 코드에서 호출)
   window.setHeartVisual = setHeartVisual;
@@ -896,7 +930,7 @@
 
     return `
     <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
-      <div class="media">
+      <div class="media" style="--pad:${pickPadPct(item)}%;${(pickBgHex(item)||'') ? `--bg:${pickBgHex(item)};` : ''}">
         <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
         <div class="hover-ui" role="group" aria-label="Post actions">
           <div class="actions">
@@ -2273,6 +2307,7 @@
 
   onReady(async () => {
     ensureHeartCSS();
+    ensureMediaPadCSS();
     initTabs();
     renderTabsOnly();
     bindEvents();
@@ -2347,6 +2382,16 @@
   /* =========================================================
    * 11) POST MODAL (카드 크게 보기)
    * ========================================================= */
+
+  // [ADD] pad % 정규화 (0~50 사이 정수, 기본 0)
+  function pickPadPct(it){
+    const raw =
+      it?.pad ?? it?.pad_pct ?? it?.padPct ?? it?.padding ??
+      it?.meta?.pad ?? it?.meta?.pad_pct ?? it?.meta?.padPct ?? 0;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(50, Math.round(n)));
+  }
 
   // [ADD] bg hex 정규화
   function pickBgHex(it){
@@ -2546,7 +2591,7 @@
       <article class="feed-card pm-split" data-id="${item.id}" data-ns="${nsOf(item)}">
         <div class="pm-layout">
           <div class="pm-left">
-            <div class="media">
+            <div class="media" style="--pad:${pickPadPct(item)}%;${(pickBgHex(item)||'') ? `--bg:${pickBgHex(item)};` : ''}">
               <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
             </div>
           </div>
