@@ -1225,6 +1225,13 @@ const LikeCache = (() => {
       const liked = (p?.liked != null) ? !!p.liked : (p?.data?.liked ?? p?.item?.liked ?? null);
       const likes = (typeof p?.likes === 'number') ? p.likes : (p?.data?.likes ?? p?.item?.likes ?? null);
 
+      // ★ 행위자 판별: p.by | p.user_id | p.uid | p.userId 등 호환
+      const actor =
+        p?.by ?? p?.user_id ?? p?.uid ?? p?.userId ?? p?.actor ?? p?.user?.id ?? null;
+      const myId  = (typeof getMeId === 'function' && getMeId()) || (window.__ME_ID || null);
+      const isMineEvent = (actor != null) && (String(actor) === String(myId));
+
+
       const last = LAST.get(id) || 0;
       // 1.2s 내에 들어온 '상충' 이벤트는 무시(사용자 최신 의도 보호)
       if (Date.now() - last <= 1200) {
@@ -1233,10 +1240,13 @@ const LikeCache = (() => {
       }
 
       // 정상 업데이트 반영
-      const nextLiked = (liked != null) ? liked : (STATE.get(id)?.liked ?? null);
+      const prevLiked = STATE.get(id)?.liked ?? null;
+      const nextLiked = isMineEvent
+        ? (liked != null ? liked : prevLiked)
+        : prevLiked;
       const nextLikes = (typeof likes === 'number') ? likes : (STATE.get(id)?.likes ?? null);
       commit(id, nextLiked, nextLikes);
-      try { LikeCache?.set?.(ns, id, nextLiked, nextLikes); } catch {}
+      try { if (isMineEvent) LikeCache?.set?.(ns, id, nextLiked, nextLikes); } catch {}
     } catch {}
   };
 
