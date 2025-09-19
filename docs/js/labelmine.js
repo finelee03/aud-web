@@ -354,16 +354,19 @@ const heartColorWhileClicked = (c) => {
 const getHeartCount = (label) => storeHeartGet(label) || 0;
 const incHeart = (label) => storeHeartInc(label);
 
+const HEART_D =
+  "M12.01 6.001C6.5 1 1 8 5.782 13.001L12.011 20l6.23-7C23 8 17.5 1 12.01 6.002Z"; // ← 끝 대문자 Z(닫힘)!
+
 function createHeartSVG({ filled, color = "#777" }){
-  const svg  = document.createElementNS("http://www.w3.org/2000/svg","svg");
-  svg.setAttribute("viewBox","0 0 24 24");
-  svg.setAttribute("aria-hidden","true");
-  svg.style.display="block";
+  const svg  = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
   const path = document.createElementNS("http://www.w3.org/2000/svg","path");
-  path.setAttribute("d","M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1 4.22 2.44C11.09 5 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z");
-  path.setAttribute("fill", filled ? color : "none");
-  path.setAttribute("stroke", filled ? color : "#777");
-  path.setAttribute("stroke-width", filled ? "0" : "1.5");
+  path.setAttribute("d", HEART_D);
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "#777");
+  path.setAttribute("stroke-width", "1.3");
   svg.appendChild(path);
   return svg;
 }
