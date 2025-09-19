@@ -1751,7 +1751,9 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       u?.handle ?? u?.username ?? u?.login ?? u?.profile?.handle ?? "";
     const avatar =
       u?.avatar_url ?? u?.avatar ?? u?.picture ?? u?.profile?.avatarUrl ?? "";
-    const ns = getNS();
+    const ns =
+      (window.SDF_NS ||
+       (localStorage.getItem("auth:userns") || "default")).trim().toLowerCase();
     return { id: id && String(id), ns, name: String(name||""), handle: String(handle||""), avatar: String(avatar||"") };
   }
 
@@ -1827,7 +1829,7 @@ function goMineAfterShare(label = getLabel()) {
       window.setSelectedLabel(label);
     }
   } catch {}
-  const url = pageHref("/mine.html")+ "?label=${encodeURIComponent(label)}&posted=1";
+  const url = `${pageHref('mine.html')}?label=${encodeURIComponent(label)}&posted=1`;
   // 뒤로가기로 작성 화면 복귀를 허용하려면 assign, 히스토리 덮으려면 replace
   location.assign(url);
 }
@@ -1879,7 +1881,7 @@ function goMineAfterShare(label = getLabel()) {
   const makeThumbMaybe = U.makeThumbnail || null;
 
   // [CHANGE] FeedUnified.uploadPost 내부, fd.append 전에 넣기
-  async function uploadPost({ blob, text, width, height, bg }) {
+  async function uploadPost({ blob, text, width, height, bg, pad = 0.08 }) {
     const label = getLabel();
     const ns    = getNS();
     const csrf  = await ensureCSRF();
@@ -1895,7 +1897,12 @@ function goMineAfterShare(label = getLabel()) {
 
       // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
       const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
-      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0.08, size: target });
+      const safePad = Math.max(0, Math.min(0.45, Number(pad) || 0)); // 0%~45%
+      const norm = SDF.Utils.trimAndPadToSquare(c, {
+        padding: safePad,
+        size: target,
+        bg    : typeof bg === "string" && bg ? bg : null, // 여백 색 = 배경색
+      });
 
       // 캔버스 → Blob
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
@@ -1960,6 +1967,7 @@ function goMineAfterShare(label = getLabel()) {
 
     return { id };
   }
+  fd.append("pad", String(safePad));
 
   async function requireLoginOrRedirect(){
     try{
@@ -2312,7 +2320,35 @@ function goMineAfterShare(label = getLabel()) {
       const picker = buildColorPicker({ onChange: (hex) => applyBg(hex) });
       applyBg('#FFFFFF');
 
-      right.append(acct, caption, meta, picker.el);
+      // ▶ 여백 슬라이더 UI
+      const marginGroup = document.createElement("div");
+      marginGroup.className = "im-group";
+      marginGroup.textContent = "Margin";
+
+      const marginRow = document.createElement("div");
+      marginRow.className = "im-row";
+      const margin = document.createElement("input");
+      margin.type = "range"; margin.min = "0"; margin.max = "45"; margin.step = "1"; margin.value = "8";
+      margin.className = "im-margin";
+      const marginVal = document.createElement("span");
+      marginVal.className = "im-kv";
+      marginVal.textContent = "8%";
+      marginRow.append(margin, marginVal);
+      marginGroup.append(marginRow);
+
+      function applyMarginPX() {
+        const pct = Number(margin.value) / 100;
+        const side = Math.min(stage.clientWidth, stage.clientHeight);
+        const padPx = Math.round(side * pct);
+        stage.style.padding = padPx + "px"; // 미리보기용
+        marginVal.textContent = `${margin.value}%`;
+      }
+      margin.addEventListener("input", applyMarginPX);
+      window.addEventListener("resize", applyMarginPX);
+      // 이미지 로드 후 초기 적용
+      img.addEventListener("load", applyMarginPX, { once: true });
+
+      right.append(acct, caption, meta, picker.el, marginGroup);
       body.append(left, right);
       shell.append(head, body);
       back.append(shell);
@@ -2347,7 +2383,14 @@ function goMineAfterShare(label = getLabel()) {
         share.textContent = "Sharing…";
         try {
           if (!await requireLoginOrRedirect()) return;
-          await uploadPost({ blob, text: caption.value, width: w, height: h, bg: bgHex });
+        await uploadPost({
+          blob,
+          text: caption.value,
+          width: w,
+          height: h,
+          bg: bgHex,
+          pad: Number(margin.value) / 100
+        });
           // ✅ 업로드 성공 → mine으로 이동
           goMineAfterShare();
           return; // 네비게이션 트리거 이후 아래 코드는 사실상 실행되지 않음
@@ -2414,8 +2457,39 @@ function goMineAfterShare(label = getLabel()) {
     const applyBg = (c) => { left.style.background = c; stage.style.background = c; bgHex = c; };
     const picker  = buildColorPicker({ onChange: (hex)=> applyBg(hex) });
     applyBg('#FFFFFF');
+    
+    // ▶ 여백 슬라이더 UI
+    const marginGroup = document.createElement("div");
+    marginGroup.className = "im-group";
+    marginGroup.textContent = "Margin";
 
-    right.append(acct, caption, meta, attach, picker.el);
+    const marginRow = document.createElement("div");
+    marginRow.className = "im-row";
+    const margin = document.createElement("input");
+    margin.type = "range"; margin.min = "0"; margin.max = "45"; margin.step = "1"; margin.value = "8";
+    margin.className = "im-margin";
+    const marginVal = document.createElement("span");
+    marginVal.className = "im-kv";
+    marginVal.textContent = "8%";
+    marginRow.append(margin, marginVal);
+    marginGroup.append(marginRow);
+
+    function applyMarginPX() {
+      const pct = Number(margin.value) / 100;
+      const side = Math.min(stage.clientWidth, stage.clientHeight);
+      const padPx = Math.round(side * pct);
+     stage.style.padding = padPx + "px"; // 미리보기용
+      marginVal.textContent = `${margin.value}%`;
+    }
+    margin.addEventListener("input", applyMarginPX);
+    window.addEventListener("resize", applyMarginPX);
+    // 이미지 로드 후 초기 적용
+    img.addEventListener("load", applyMarginPX, { once: true });
+
+    right.append(acct, caption, meta, picker.el, marginGroup);
+
+    stageImg.addEventListener("load", applyMarginPX);
+
 
     // 글로벌 닫기
     const globalClose = document.createElement("button");
@@ -2482,13 +2556,14 @@ function goMineAfterShare(label = getLabel()) {
       share.textContent = "Sharing…";
       try {
         if (!await requireLoginOrRedirect()) return;
-        await uploadPost({
-          blob: state.blob,
-          text: caption.value,
-          width: state.w,
-          height: state.h,
-          bg: bgHex
-        });
+      await uploadPost({
+        blob: state.blob,
+        text: caption.value,
+        width: state.w,
+        height: state.h,
+        bg: bgHex,
+        pad: Number(margin.value) / 100
+      });
         // ✅ 업로드 성공 → mine으로 이동
         goMineAfterShare();
         return;

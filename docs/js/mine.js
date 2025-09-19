@@ -770,6 +770,7 @@
   window.setHeartVisual = setHeartVisual;
   window.upgradeHeartIconIn = upgradeHeartIconIn;
   window.ensureHeartCSS = ensureHeartCSS;
+  window.ensureMediaPadCSS   = ensureMediaPadCSS;
 })();
 
   // 숫자 압축 표기 (15K, 2.1M 등). 미지원 환경이면 원본 출력
