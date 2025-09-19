@@ -574,74 +574,72 @@
 
   function ensureSocket() {
     if (!isNotifyOn()) return null;
-    if (socket) return socket;
-    if (window.sock) { socket = window.sock; return socket; } // ← 이미 socket-init에서 만든 인스턴스 재사용
-    if (!window.io) return null;
-    socket = window.io({ path: "/socket.io" });
-    socket.on("connect", () => {
-      if (MY_ITEM_IDS.size) socket.emit("subscribe", { items: [...MY_ITEM_IDS] });
-    });
 
-  // ── helpers (파일 상단 utils 근처에 추가해도 됨)
-  const qty = (n, one, many = one + "s") => {
-    n = Number(n || 0);
-    return `${n} ${n === 1 ? one : many}`;
-  };
-
-  // ── 소켓 리스너 교체본
-  socket.on("item:like", (p) => {
-    if (!isNotifyOn() || !p || !p.id) return;
-    if (!MY_ITEM_IDS.has(String(p.id))) return;
-    if (MY_UID && String(p.by) === String(MY_UID)) return;
-
-    if (p.liked) {
-      const likes = Number(p.likes || 0);
-      pushNotice(
-        "My post got liked",
-        `Total ${qty(likes, "like")}`, // 1 like / 2 likes
-        { tag: `like:${p.id}`, data: { id: String(p.id) } }
-      );
+    // 1) 소켓 인스턴스 확보 (있으면 재사용, 없으면 생성)
+    if (socket && socket.connected !== undefined) {
+      // 이미 리스너가 붙어 있다면 그대로 반환
+    } else if (window.sock && window.sock.connected !== undefined) {
+      socket = window.sock;
+    } else {
+      if (!window.io) return null;
+      socket = window.io({ path: "/socket.io" });
+      try { window.sock = socket; } catch {}
     }
-  });
 
-  socket.on("comment:like", (p) => {
-    if (!isNotifyOn() || !p || !p.id) return;
-    if (!MY_ITEM_IDS.has(String(p.id))) return;
-    if (MY_UID && String(p.by) === String(MY_UID)) return;
+    // 2) 리스너가 중복으로 붙지 않도록 가드
+    if (!socket.__meHandlersAttached) {
+      socket.__meHandlersAttached = true;
 
-    if (p.liked) {
-      const likes = Number(p.likes || 0);
-      pushNotice(
-        "A comment on my post got a like",
-        `Comment ${p.cid} · Total ${qty(likes, "like")}`, // 1 like / 3 likes
-        { tag: `comment-like:${p.id}:${p.cid}`, data: { id: String(p.id), cid: String(p.cid || "") } }
-      );
+      socket.on("connect", () => {
+        if (MY_ITEM_IDS.size) socket.emit("subscribe", { items: [...MY_ITEM_IDS] });
+      });
+
+      // ── 도우미
+      const qty = (n, one, many = one + "s") => `${Number(n||0)} ${Number(n||0) === 1 ? one : many}`;
+
+      // ── 알림 리스너들
+      socket.on("item:like", (p) => {
+        if (!isNotifyOn() || !p || !p.id) return;
+        if (!MY_ITEM_IDS.has(String(p.id))) return;
+        if (MY_UID && String(p.by) === String(MY_UID)) return;
+        if (p.liked) {
+          const likes = Number(p.likes || 0);
+          pushNotice("My post got liked", `Total ${qty(likes, "like")}`, { tag: `like:${p.id}`, data: { id: String(p.id) } });
+        }
+      });
+
+      socket.on("comment:like", (p) => {
+        if (!isNotifyOn() || !p || !p.id) return;
+        if (!MY_ITEM_IDS.has(String(p.id))) return;
+        if (MY_UID && String(p.by) === String(MY_UID)) return;
+        if (p.liked) {
+          const likes = Number(p.likes || 0);
+          pushNotice("A comment on my post got a like",
+            `Comment ${p.cid} · Total ${qty(likes, "like")}`,
+            { tag: `comment-like:${p.id}:${p.cid}`, data: { id: String(p.id), cid: String(p.cid || "") } }
+          );
+        }
+      });
+
+      socket.on("vote:update", (p) => {
+        if (!isNotifyOn() || !p || !p.id) return;
+        if (!MY_ITEM_IDS.has(String(p.id))) return;
+
+        try {
+          const entries = Object.entries(p.counts || {});
+          const max = Math.max(...entries.map(([, n]) => Number(n || 0)), 0);
+          const tops = entries.filter(([, n]) => Number(n || 0) === max && max > 0).map(([k]) => k);
+          const total = entries.reduce((s, [, n]) => s + Number(n || 0), 0);
+          const label = tops.length ? tops.join(", ") : "—";
+          pushNotice("My post votes have been updated",
+            `Most votes: ${label} · Total ${qty(total, "vote")}`,
+            { tag: `vote:${p.id}`, data: { id: String(p.id) } }
+          );
+        } catch {
+          pushNotice("My post votes have been updated", "", { tag: `vote:${p?.id||""}`, data: { id: String(p?.id||"") } });
+        }
+      });
     }
-  });
-
-  socket.on("vote:update", (p) => {
-    if (!isNotifyOn() || !p || !p.id) return;
-    if (!MY_ITEM_IDS.has(String(p.id))) return;
-
-    try {
-      const entries = Object.entries(p.counts || {});
-      const max = Math.max(...entries.map(([, n]) => Number(n || 0)), 0);
-      const tops = entries.filter(([, n]) => Number(n || 0) === max && max > 0).map(([k]) => k);
-      const total = entries.reduce((s, [, n]) => s + Number(n || 0), 0);
-      const label = tops.length ? tops.join(", ") : "—";
-      pushNotice(
-        "My post votes have been updated",
-        `Most votes: ${label} · Total ${qty(total, "vote")}`, // 0 votes / 1 vote / 2 votes
-        { tag: `vote:${p.id}`, data: { id: String(p.id) } }
-      );
-    } catch {
-      pushNotice(
-        "My post votes have been updated",
-        "",
-        { tag: `vote:${p?.id || ""}`, data: { id: String(p?.id || "") } }
-      );
-    }
-  });
 
     return socket;
   }
