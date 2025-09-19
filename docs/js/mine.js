@@ -821,11 +821,7 @@ const LikeCache = (() => {
 
 
   const nsOf = (item) => String(item?.ns ?? "default").trim().toLowerCase();
-  const imageURL = (item) => {
-    const ns  = String(item?.ns || 'default').trim().toLowerCase();
-    const ext = String(item?.ext || 'webp').replace(/[^a-z0-9]/gi,'').toLowerCase();
-    return `/uploads/${encodeURIComponent(ns)}/${encodeURIComponent(item.id)}.${ext}`;
-  };
+  const blobURL = (item) => toAPI(`/api/gallery/${encodeURIComponent(item.id)}/blob`);
   const fmtDate = (ts) => {
     try {
       const d = new Date(Number(ts) || Date.now());
@@ -880,7 +876,7 @@ const LikeCache = (() => {
     return `
     <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
       <div class="media">
-        <img src="${imageURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
+        <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
         <div class="hover-ui" role="group" aria-label="Post actions">
           <div class="actions">
             <div class="stat" data-like-readonly>
@@ -957,10 +953,25 @@ const LikeCache = (() => {
       const idx = FEED.idxById.get(id);
       const ns  = (typeof idx === "number" && FEED.items[idx]?.ns) ? FEED.items[idx].ns : (window.getNS ? getNS() : "default");
       const pid = encodeURIComponent(id);
+      const nsq = `ns=${encodeURIComponent(ns)}`;
 
       // 1) /api/items/:id
       try {
-        const r = await api(`/api/items/${pid}`, { credentials: "include", cache: "no-store" });
+        const r = await api(`/api/items/${pid}?${nsq}`, { credentials: "include", cache: "no-store" });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok) {
+          const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
+          LikeCache.mergeServer(ns, id, liked, likes); // [ADD]
+          const pref = LikeCache.get(ns, id);
+          const L = (pref && pref.liked != null) ? pref.liked : liked;
+          const C = (pref && typeof pref.likes === "number") ? pref.likes : likes;
+          applyUI(id, L, C); 
+          return;
+        }} catch {}
+
+      // 2) /api/gallery/:id (폴백)
+      try {
+        const r = await api(`/api/gallery/${pid}?${nsq}`, { credentials: "include", cache: "no-store" });
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
@@ -1156,11 +1167,12 @@ const LikeCache = (() => {
       headers: body ? { 'Content-Type':'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined
     });
-  {
-    const u = `/api/items/${encodeURIComponent(id)}/like`;
-    let r = await api(u, await mk('PUT', { like: !!wantLike }));
-    if (!r?.ok && wantLike === false) r = await api(u, await mk('DELETE'));
-    if (r?.ok){
+    const bases = ['items','gallery'];
+    for (const b of bases){
+      const u = `/api/${b}/${encodeURIComponent(id)}/like?ns=${encodeURIComponent(ns)}`;
+      let r = await api(u, await mk('PUT', { like: !!wantLike }));
+      if (!r?.ok && wantLike === false) r = await api(u, await mk('DELETE'));
+      if (r?.ok){
         let j={}; try{ if (r.status!==204) j = await r.json(); }catch{}
         const liked = j?.liked ?? j?.item?.liked ?? j?.data?.liked;
         const likes = j?.likes ?? j?.item?.likes ?? j?.data?.likes;
@@ -1184,7 +1196,8 @@ const LikeCache = (() => {
         };
       }catch{ return null; }
     };
-    return (await tryGet(`/api/items/${encodeURIComponent(id)}`))
+    return (await tryGet(`/api/items/${encodeURIComponent(id)}?ns=${encodeURIComponent(ns)}`))
+        || (await tryGet(`/api/gallery/${encodeURIComponent(id)}?ns=${encodeURIComponent(ns)}`))
         || null;
   }
 
@@ -1209,28 +1222,19 @@ const LikeCache = (() => {
       const id  = String(p?.id || p?.itemId || '');
       if (!id) return;
       const ns  = String(p?.ns || p?.item_ns || p?.item?.ns || getNS());
-      const incomingLiked = (p?.liked != null) ? !!p.liked : (p?.data?.liked ?? p?.item?.liked ?? null);
+      const liked = (p?.liked != null) ? !!p.liked : (p?.data?.liked ?? p?.item?.liked ?? null);
       const likes = (typeof p?.likes === 'number') ? p.likes : (p?.data?.likes ?? p?.item?.likes ?? null);
 
       const last = LAST.get(id) || 0;
       // 1.2s 내에 들어온 '상충' 이벤트는 무시(사용자 최신 의도 보호)
       if (Date.now() - last <= 1200) {
         const st = STATE.get(id);
-        if (st && incomingLiked != null && st.liked !== incomingLiked) return;
+        if (st && liked != null && st.liked !== liked) return;
       }
 
       // 정상 업데이트 반영
-      const me = (typeof getMeId === 'function' && getMeId()) || window.__ME_ID || null;
-      const actorId = String(p?.by ?? p?.actor ?? p?.userId ?? p?.user_id ?? '') || null;
-      const isMineEvent = me && actorId && String(me) === String(actorId);
-
-      // likes는 항상 반영. liked는 '내 이벤트'에 한해서만 반영
-      const prev = STATE.get(id) || {};
-      const nextLiked = isMineEvent
-        ? (incomingLiked != null ? incomingLiked : prev.liked)
-        : prev.liked;
-      const nextLikes = (typeof likes === 'number') ? likes : prev.likes;
-
+      const nextLiked = (liked != null) ? liked : (STATE.get(id)?.liked ?? null);
+      const nextLikes = (typeof likes === 'number') ? likes : (STATE.get(id)?.likes ?? null);
       commit(id, nextLiked, nextLikes);
       try { LikeCache?.set?.(ns, id, nextLiked, nextLikes); } catch {}
     } catch {}
@@ -1284,22 +1288,12 @@ const LikeCache = (() => {
     }
   }
 
+  // 공개 심볼 재지정
+  window.toggleLike = toggleLike;
+
   // 업그레이드 누락 보호(초기 로드시 SVG/색상 보정)
   try { window.upgradeHeartIconIn?.(document); } catch {}
 })();
-
-// NS/계정 전환 시 하트 메모리 초기화
-try {
-  window.addEventListener('store:ns-changed', () => {
-    try { window.__HEART_STATE?.clear?.(); } catch {}
-    try { window.__HEART_LAST?.clear?.(); } catch {}
-  });
-  window.addEventListener('auth:state', () => {
-    try { window.__HEART_STATE?.clear?.(); } catch {}
-    try { window.__HEART_LAST?.clear?.(); } catch {}
-  });
-} catch {}
-
 
 
   // -----------------------------------------------------------------------
@@ -1411,9 +1405,16 @@ try {
       let r, j = {};
 
       // ✅ 1순위: /api/items/:id
-      r = await api(`/api/items/${encodeURIComponent(item.id)}`,
+      r = await api(`/api/items/${encodeURIComponent(item.id)}?ns=${encodeURIComponent(ns)}`,
                     { credentials:'include', cache:'no-store' });
       j = await r.json().catch(() => ({}));
+
+      // 폴백: /api/gallery/:id
+      if (!r.ok) {
+        r = await api(`/api/gallery/${encodeURIComponent(item.id)}?ns=${encodeURIComponent(ns)}`,
+                      { credentials:'include', cache:'no-store' });
+        j = await r.json().catch(() => ({}));
+      }
 
       const pickUser = (o) => (o?.user || o?.item?.user || o?.data?.user || null);
       const u = pickUser(j);
@@ -1440,14 +1441,14 @@ try {
 
     // 1) 표준 REST: DELETE /api/items/:id
     let r = await api(
-      `/api/items/${encodeURIComponent(id)}`,
+      `/api/items/${encodeURIComponent(id)}?ns=${encodeURIComponent(ns)}`,
       await withCSRF({ method: "DELETE", credentials: "include" })
     );
 
     // 2) 구환경 폴백: POST /api/items/:id/delete
     if (!r.ok && (r.status === 404 || r.status === 405)) {
       r = await api(
-        `/api/items/${encodeURIComponent(id)}/delete`,
+        `/api/items/${encodeURIComponent(id)}/delete?ns=${encodeURIComponent(ns)}`,
         await withCSRF({ method: "POST", credentials: "include" })
       );
     }
@@ -1455,7 +1456,7 @@ try {
     // 3) 최후 폴백: POST /api/delete?item=ID
     if (!r.ok && (r.status === 404 || r.status === 405)) {
       r = await api(
-        `/api/delete?item=${encodeURIComponent(id)}`,
+        `/api/delete?item=${encodeURIComponent(id)}&ns=${encodeURIComponent(ns)}`,
         await withCSRF({ method: "POST", credentials: "include" })
       );
     }
@@ -1620,10 +1621,11 @@ try {
     // [REPLACE] 표준 → 대체 → 메타 추출 순으로 시도
     async function fetchVotes(itemId, ns) {
       const pid = encodeURIComponent(itemId);
+      const nsq = `ns=${encodeURIComponent(ns)}`;
 
       // 1) 표준: GET /api/items/:id/votes
       try {
-        const r = await api(`/api/items/${pid}/votes`, { credentials: 'include', cache: 'no-store' });
+        const r = await api(`/api/items/${pid}/votes?${nsq}`, { credentials: 'include', cache: 'no-store' });
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const picked = pickVotesFrom(j) || pickVotesFrom(j.item) || pickVotesFrom(j.data);
@@ -1633,7 +1635,7 @@ try {
 
       // 2) 대체: GET /api/votes?item=ID
       try {
-        const r = await api(`/api/votes?item=${pid}`, { credentials: 'include', cache: 'no-store' });
+        const r = await api(`/api/votes?item=${pid}&${nsq}`, { credentials: 'include', cache: 'no-store' });
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const picked = pickVotesFrom(j) || pickVotesFrom(j.item) || pickVotesFrom(j.data);
@@ -1643,7 +1645,7 @@ try {
 
       // 3) 메타 혼합: GET /api/items/:id → 필드에서 추출 (완전 폴백)
       try {
-        const r = await api(`/api/items/${pid}`, { credentials: 'include', cache: 'no-store' });
+        const r = await api(`/api/items/${pid}?${nsq}`, { credentials: 'include', cache: 'no-store' });
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const picked = pickVotesFrom(j) || pickVotesFrom(j.item) || pickVotesFrom(j.data);
@@ -1660,17 +1662,18 @@ try {
     async function castVote(itemId, label, ns) {
       await ensureCSRF();
       const pid = encodeURIComponent(itemId);
+      const nsq = `ns=${encodeURIComponent(ns)}`;
 
       // 1) 신형: PUT /items/:id/vote?label=...
       let r = await api(
-        `/api/items/${pid}/vote?label=${encodeURIComponent(label)}`,
+        `/api/items/${pid}/vote?${nsq}&label=${encodeURIComponent(label)}`,
         await withCSRF({ method: "PUT", credentials: "include" })
       );
 
       // 2) 신형(바디 JSON)
       if (!r.ok) {
         r = await api(
-          `/api/items/${pid}/vote`,
+          `/api/items/${pid}/vote?${nsq}`,
           await withCSRF({
             method: "PUT",
             credentials: "include",
@@ -1683,7 +1686,7 @@ try {
       // 3) 구형: POST /items/:id/votes
       if (!r.ok) {
         r = await api(
-          `/api/items/${pid}/votes`,
+          `/api/items/${pid}/votes?${nsq}`,
           await withCSRF({
             method: "POST",
             credentials: "include",
@@ -1696,7 +1699,7 @@ try {
       // 4) 레거시: POST /api/votes
       if (!r.ok) {
         r = await api(
-          `/api/votes`,
+          `/api/votes?${nsq}`,
           await withCSRF({
             method: "POST",
             credentials: "include",
@@ -1719,17 +1722,18 @@ try {
     async function unvote(itemId, ns) {
       await ensureCSRF();
       const pid = encodeURIComponent(itemId);
+      const nsq = `ns=${encodeURIComponent(ns)}`;
 
       // 1) 신형: DELETE /items/:id/vote
       let r = await api(
-        `/api/items/${pid}/vote`,
+        `/api/items/${pid}/vote?${nsq}`,
         await withCSRF({ method: "DELETE", credentials: "include" })
       );
 
       // 2) 신형(복수): DELETE /items/:id/votes
       if (!r.ok) {
         r = await api(
-          `/api/items/${pid}/votes`,
+          `/api/items/${pid}/votes?${nsq}`,
           await withCSRF({ method: "DELETE", credentials: "include" })
         );
       }
@@ -1737,7 +1741,7 @@ try {
       // 3) 레거시: DELETE /api/votes?item=ID
       if (!r.ok) {
         r = await api(
-          `/api/votes?item=${pid}`,
+          `/api/votes?item=${pid}&${nsq}`,
           await withCSRF({ method: "DELETE", credentials: "include" })
         );
       }
@@ -1745,12 +1749,12 @@ try {
       // 4) 아주 레거시: POST /items/:id/unvote, /api/unvote
       if (!r.ok) {
         r = await api(
-          `/api/items/${pid}/unvote`,
+          `/api/items/${pid}/unvote?${nsq}`,
           await withCSRF({ method: "POST", credentials: "include" })
         );
         if (!r.ok) {
           r = await api(
-            `/api/unvote?item=${pid}`,
+            `/api/unvote?item=${pid}&${nsq}`,
             await withCSRF({ method: "POST", credentials: "include" })
           );
         }
@@ -1972,7 +1976,6 @@ try {
     __sock.on("item:like", (p) => {
       try { window.applyItemLikeEvent?.(p); } catch {}
       try { __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type: "item:like", data: p } }); } catch {}
-      try { notifyRemote("item:like", p); } catch {}
     });
 
     __sock.on("vote:update", (p) => {
@@ -1986,7 +1989,6 @@ try {
       try {
         __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type:"vote:update", data: p } });
       } catch {}
-      try { notifyRemote("item:like", p); } catch {}
     });
 
     __sock.on("item:removed", (p) => {
@@ -2196,17 +2198,7 @@ try {
           window.dispatchEvent(new CustomEvent("user:updated", { detail: snap }));
         }
       } catch {}
-      try {
-        const ns = String(__ME_ID||"").toLowerCase();
-        sessionStorage.setItem("auth:userns:session", ns);  // ← 세션(탭) 고정
-        // (레거시 페이지 호환이 꼭 필요하면) localStorage는 유지해도 되지만,
-        // 다계정/다탭 동시 사용 시엔 생략하는 게 안전합니다.
-        // localStorage.setItem("auth:userns", ns);
-        window.dispatchEvent(new CustomEvent("store:ns-changed", { detail: ns }));
-      } catch {}
-
-      try { ensureFeedChannel(); } catch {}
-
+      try { if (__ME_ID) localStorage.setItem("auth:userns", String(__ME_ID).toLowerCase()); } catch {}
       migrateMineOnlyFlagToNS();
       if (!flagged) setAuthedFlag();
       idle(() => rehydrateFromLocalStorageIfSessionAuthed());
@@ -2420,7 +2412,7 @@ try {
         <div class="pm-layout">
           <div class="pm-left">
             <div class="media">
-              <img src="${imageURL(item)}" alt="${safeLabel || 'item'}" />
+              <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
             </div>
           </div>
 
@@ -2478,9 +2470,16 @@ try {
         let r, j = {};
 
         // ✅ 1순위: /api/items/:id
-        r = await api(`/api/items/${encodeURIComponent(item.id)}`,
+        r = await api(`/api/items/${encodeURIComponent(item.id)}?ns=${encodeURIComponent(ns)}`,
                       { credentials:'include', cache:'no-store' });
         j = await r.json().catch(() => ({}));
+
+        // 폴백: /api/gallery/:id  (서버에 있을 수도 있으니 최후에만 시도)
+        if (!r.ok) {
+          r = await api(`/api/gallery/${encodeURIComponent(item.id)}?ns=${encodeURIComponent(ns)}`,
+                        { credentials:'include', cache:'no-store' });
+          j = await r.json().catch(() => ({}));
+        }
 
         const pickText = (o) => {
           if (!o || typeof o !== 'object') return '';
@@ -2650,141 +2649,94 @@ try {
   })();
 
   /* =========================================================
-  * 12) BROADCAST CHANNEL (aud:sync:<ns>) — LAZY + REBIND
-  * ========================================================= */
-  let __bcNS = null;        // 현재 바인딩된 ns
-  let __bc = null;          // 현재 BroadcastChannel 인스턴스
+   * 12) BROADCAST CHANNEL (aud:sync:<ns>)
+   * ========================================================= */
+  try {
+    const __NS = (typeof getNS === "function" ? getNS() : (window.__STORE_NS || "default"));
+    const __K_LABEL = LABEL_SYNC_KEY;
+    const __K_JIB   = JIB_SYNC_KEY;
+    const __bc = new BroadcastChannel(`aud:sync:${__NS}`);
+    __bcFeed = __bc;
+    __bc.addEventListener("message", (e) => {
+      const m = e && e.data; if (!m || !m.kind) return;
 
-  function ensureFeedChannel() {
-    const ns = (typeof getNS === "function" ? getNS() : (window.__STORE_NS || "default")) || "default";
-    if (__bc && __bcNS === ns) return; // 이미 최신 NS로 연결됨
+      if (m.kind === __K_LABEL && m.payload && Array.isArray(m.payload.arr)) {
+        if (window.store?.clear && window.store?.add) {
+          window.store.clear();
+          for (const lb of m.payload.arr) window.store.add(lb);
+        } else {
+          sessionStorage.setItem(REG_KEY, JSON.stringify(m.payload.arr));
+          window.dispatchEvent(new Event(EVT_LABEL));
+        }
+        try { (window.mineRenderAll?.() || window.scheduleRender?.()); } catch {}
+      }
 
-    // 채널 재바인딩
-    try { __bc?.close?.(); } catch {}
-    __bcNS = ns;
-    try {
-      __bc = new BroadcastChannel(`aud:sync:${ns}`);
-      __bcFeed = __bc;
+      if (m.kind === __K_JIB && m.payload) {
+        if (m.payload.type === "set" && Array.isArray(m.payload.arr)) {
+          if (window.jib?.clear && window.jib?.add) {
+            window.jib.clear();
+            for (const k of m.payload.arr) window.jib.add(k);
+          } else {
+            sessionStorage.setItem(JIB_KEY, JSON.stringify(m.payload.arr));
+            window.dispatchEvent(new Event(EVT_JIB));
+          }
+          try { (window.mineRenderAll?.() || window.scheduleRender?.()); } catch {}
+        } else if (m.payload.type === "select") {
+          if (window.jib?.setSelected) window.jib.setSelected(m.payload.k ?? null);
+        }
+      }
 
-      // 현재 시점의 키를 캡처해 핸들러 내부에서 사용
-      const __K_LABEL = LABEL_SYNC_KEY;
-      const __K_JIB   = JIB_SYNC_KEY;
+      if (m.kind === FEED_EVENT_KIND && m.payload) {
+        const { type, data } = m.payload;
+        if (type === "item:like")   try { window.applyItemLikeEvent?.(data); } catch {}
+        if (type === "vote:update") {
+          try {
+            const id = String(data?.id || data?.itemId || "");
+            if (!id) return;
+            const counts = data?.counts || data?.totals || data?.votes || data?.items || data?.data || {};
+            const my = data?.my ?? data?.mine ?? data?.choice ?? null;
+            POLL.updateEverywhere(id, counts, my);
+          } catch {}
+        }
 
-      __bc.addEventListener("message", (e) => {
-        const m = e && e.data; if (!m || !m.kind) return;
-
-        // ===== 라벨/지비츠 동기화 수신 =====
-        if (m.kind === __K_LABEL && m.payload) {
-          if (m.payload.type === "set" && Array.isArray(m.payload.arr)) {
-            if (window.store?.clear && window.store?.add) {
-              window.store.clear();
-              for (const lb of m.payload.arr) window.store.add(lb);
-            } else {
-              try { sessionStorage.setItem("collectedLabels", JSON.stringify(m.payload.arr)); } catch {}
-              try { window.dispatchEvent(new Event((window.LABEL_COLLECTED_EVT||"collectedLabels:changed"))); } catch {}
+        if (type === "item:removed") {
+          try {
+            const id = String(data?.id || data?.itemId || "");
+            if (!id) return;
+            removeItemEverywhere(id);
+            const openCard = document.querySelector('#post-modal .feed-card[data-id]');
+            if (openCard && String(openCard.getAttribute('data-id')) === id) {
+              document.querySelector('.pm-close')?.click();
             }
-            try { (window.mineRenderAll?.() || window.scheduleRender?.()); } catch {}
-          } else if (m.payload.type === "select") {
-            if (window.store?.setSelected) window.store.setSelected(m.payload.label ?? null);
-          }
-          return;
+          } catch {}
         }
 
-        if (m.kind === __K_JIB && m.payload) {
-          if (m.payload.type === "set" && Array.isArray(m.payload.arr)) {
-            if (window.jib?.clear && window.jib?.add) {
-              window.jib.clear();
-              for (const k of m.payload.arr) window.jib.add(k);
-            } else {
-              try { sessionStorage.setItem("jib:collected", JSON.stringify(m.payload.arr)); } catch {}
-              try { window.dispatchEvent(new Event((window.JIB_COLLECTED_EVT||"jib:collection-changed"))); } catch {}
-            }
-            try { (window.mineRenderAll?.() || window.scheduleRender?.()); } catch {}
-            return;
-          }
-          if (m.payload.type === "select") {
-            if (window.jib?.setSelected) window.jib.setSelected(m.payload.k ?? null);
-            return;
-          }
-        }
-
-        // ===== FEED 이벤트 중계 수신 =====
-        if (m.kind === (window.FEED_EVENT_KIND || "feed:event") && m.payload) {
-          const { type, data } = m.payload;
-
-          if (type === "item:like") {
-            try { window.applyItemLikeEvent?.(data); } catch {}
-            return;
-          }
-
-          if (type === "vote:update") {
-            try {
-              const id = String(data?.id || data?.itemId || "");
-              if (!id) return;
-              const counts = data?.counts || data?.totals || data?.votes || data?.items || data?.data || {};
-              const my     = data?.my ?? data?.mine ?? data?.choice ?? null;
-              POLL.updateEverywhere(id, counts, my);
-            } catch {}
-            return;
-          }
-
-          if (type === "item:removed") {
-            try {
-              const id = String(data?.id || data?.itemId || "");
-              if (!id) return;
-              removeItemEverywhere(id);
-              const openCard = document.querySelector('#post-modal .feed-card[data-id]');
-              if (openCard && String(openCard.getAttribute('data-id')) === id) {
-                document.querySelector('.pm-close')?.click();
-              }
-            } catch {}
-            return;
-          }
-        }
-      });
-    } catch {}
-  }
-
-  // 최초 진입 시 한 번 보장
-  ensureFeedChannel();
-
-  // NS / 인증 상태가 바뀌면 즉시 재바인딩
-  window.addEventListener("store:ns-changed", ensureFeedChannel);
-  window.addEventListener("auth:state", ensureFeedChannel);
-
+      }
+    });
+  } catch {}
 
   // === FEED → other tabs (me.html) 알림 브릿지: 내가 한 행동을 방송 ===
   function bcNotifySelf(type, data){
-    // 채널이 항상 최신 NS로 열려 있도록 보장
-    try { ensureFeedChannel(); } catch {}
-
-    // BroadcastChannel 브로드캐스트
+    // BroadcastChannel
     try { __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type, data } }); } catch {}
 
-    // localStorage 폴백(동일 NS 키에만 기록)
+    // localStorage 폴백 (다른 탭의 storage 이벤트가 받음)
     try {
       const ns = (typeof getNS === 'function' ? getNS() : 'default');
       localStorage.setItem(`notify:self:${ns}`, JSON.stringify({ type, data, t: Date.now() }));
     } catch {}
   }
 
-  // === FEED → other tabs (me.html) 알림 브릿지: '다른 사람이 한' 행동을 방송 ===
-  function notifyRemote(type, data){
-    // 이 이벤트가 "내" 게시물에 대한 것인지 간단히 거른 뒤만 알림 전파
-    try {
-      const ns = (typeof getNS === 'function' ? getNS() : 'default');
-      const ownerNS = String(data?.owner?.ns || data?.ns || "").toLowerCase();
-      const mineFlag = (data?.mine === true) || (ownerNS && ownerNS === ns);
-      if (!mineFlag) return; // 내 게시물이 아니면 알림 X
-      // BroadcastChannel로도 쏘고
-      try { __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type, data } }); } catch {}
-      // localStorage 폴백 키: notify:remote:<ns>
-      localStorage.setItem(`notify:remote:${ns}`, JSON.stringify({ type, data, t: Date.now() }));
-    } catch {}
-  }
 
   /* =========================================================
-  * 13) TITLE → me 페이지 이동(인증 가드 포함)
+   * 13) LOGOUT BUTTON (robust, idempotent)
+   * ========================================================= */
+  
+
+  
+
+  /* =========================================================
+  * 14) TITLE → me 페이지 이동(인증 가드 포함)
   * ========================================================= */
   function bindTitleToMe() {
     // 1) 우선 A안: a#title-link가 있으면 그걸 사용
@@ -2879,17 +2831,17 @@ try {
       return { counts: c, total };
     }
     async function fetchVotesSafe(itemId, ns){
-      const pid = encodeURIComponent(itemId);
+      const pid = encodeURIComponent(itemId); const nsq = `ns=${encodeURIComponent(ns)}`;
       // 1) /items/:id/votes
-      try { const r = await api(`/api/items/${pid}/votes`, { credentials:"include", cache:"no-store" });
+      try { const r = await api(`/api/items/${pid}/votes?${nsq}`, { credentials:"include", cache:"no-store" });
         const j = await r?.json()?.catch?.(()=>({})); if (r?.ok) return pickVotesFrom(j?.data ?? j?.item ?? j ?? {});
       } catch {}
       // 2) /votes?item=
-      try { const r = await api(`/api/votes?item=${pid}`, { credentials:"include", cache:"no-store" });
+      try { const r = await api(`/api/votes?item=${pid}&${nsq}`, { credentials:"include", cache:"no-store" });
         const j = await r?.json()?.catch?.(()=>({})); if (r?.ok) return pickVotesFrom(j?.data ?? j?.item ?? j ?? {});
       } catch {}
       // 3) /items/:id
-      try { const r = await api(`/api/items/${pid}`, { credentials:"include", cache:"no-store" });
+      try { const r = await api(`/api/items/${pid}?${nsq}`, { credentials:"include", cache:"no-store" });
         const j = await r?.json()?.catch?.(()=>({})); if (r?.ok) return pickVotesFrom(j?.data ?? j?.item ?? j ?? {});
       } catch {}
       return { counts: emptyCounts(), total: 0 };
@@ -2963,135 +2915,6 @@ try {
     } catch {}
     // 3) NS가 바뀌면 캐시 분리 — store.js가 이벤트를 쏴줌
     window.addEventListener("store:ns-changed", ()=>{/* no-op: 키가 ns별이라 충돌 없음 */});
-  })();
-  // === [ADD] Received Hearts (likes "received" on my posts) ===================
-  (() => {
-    const $ = (s, r=document) => r.querySelector(s);
-    const TTL = 10 * 60 * 1000; // 10분 캐시
-    const KEY = (ns) => `receivedHearts:${ns}`;
-    const MAP_KEY = (ns) => `receivedHearts:itemLabelMap:${ns}`; // itemId -> label (증분 갱신용)
-
-    const getNS = (window.getNS) ? window.getNS : () => {
-      try { return (localStorage.getItem("auth:userns") || "default").trim().toLowerCase(); }
-      catch { return "default"; }
-    };
-    const api = (p,o)=> (window.auth?.apiFetch ? window.auth.apiFetch(p,o) : fetch(p,o||{}));
-
-    // mine.js의 fetchAllMyItems 재사용 (위에 이미 정의됨)
-    async function fetchAllMyItems(maxPages=20, pageSize=60){
-      if (window.mineInsights && window.mineInsights._compute) {
-        // 위쪽에 이미 동일 함수가 있으므로 중복 정의 피하기 위해 그걸 씁니다.
-      }
-      const out=[]; let cursor=null; const ns=getNS();
-      for (let p=0; p<maxPages; p++){
-        const qs=new URLSearchParams({ limit: String(Math.min(pageSize,60)), ns });
-        if (cursor){ qs.set("after",String(cursor)); qs.set("cursor",String(cursor)); }
-        const r = await api(`/api/gallery/public?${qs}`, { credentials:"include" });
-        if (!r || !r.ok) break;
-        const j = await r.json().catch(()=>({}));
-        const items = Array.isArray(j?.items) ? j.items : [];
-        items.forEach(it => {
-          const mine = it?.mine === true
-            || String(it?.ns||"").toLowerCase()===ns
-            || String(it?.owner?.ns||"").toLowerCase()===ns;
-          if (mine) out.push(it);
-        });
-        cursor = j?.nextCursor || null;
-        if (!cursor || items.length===0) break;
-      }
-      return out;
-    }
-
-    function readCache(ns, ttl=TTL){
-      try {
-        const raw = sessionStorage.getItem(KEY(ns)); if (!raw) return null;
-        const obj = JSON.parse(raw);
-        if (!obj?.t) return null;
-        if (ttl>0 && (Date.now()-obj.t) > ttl) return null;
-        return obj;
-      } catch { return null; }
-    }
-    function writeCache(ns, data, itemLabelMap){
-      try {
-        sessionStorage.setItem(KEY(ns), JSON.stringify({ ...data, t: Date.now() }));
-        if (itemLabelMap) sessionStorage.setItem(MAP_KEY(ns), JSON.stringify(itemLabelMap));
-      } catch {}
-    }
-    function invalidate(ns){ try{ sessionStorage.removeItem(KEY(ns)); }catch{} }
-
-    async function compute(){
-      const ns = getNS();
-      const mineItems = await fetchAllMyItems();
-      const perLabel = { thump:0, miro:0, whee:0, track:0, echo:0, portal:0 };
-      const id2label = {};
-      let total = 0;
-
-      for (const it of mineItems){
-        const lb = String(it.label || '').trim();
-        const likes = Math.max(0, Number(it.likes || 0));
-        if (perLabel[lb] == null) perLabel[lb] = 0; // 라벨이 비었거나 신규라면 0부터
-        perLabel[lb] += likes;
-        total += likes;
-        if (it.id) id2label[String(it.id)] = lb;
-      }
-      return { total, perLabel, id2label };
-    }
-
-    async function get(opts={}){
-      const ns = getNS();
-      const cached = readCache(ns, opts.maxAge ?? TTL);
-      if (cached) return cached;
-      const { total, perLabel, id2label } = await compute();
-      writeCache(ns, { total, perLabel }, id2label);
-      // 소비자에게 알림(선택): hearts:received
-      try { window.dispatchEvent(new CustomEvent("hearts:received", { detail:{ ns, total, perLabel } })); } catch {}
-      return { total, perLabel, t: Date.now() };
-    }
-
-    // 실시간 좋아요 이벤트가 오면 캐시 무효화 (재계산하여 '받은' 수 반영)
-    function hookInvalidators(){
-      const ns = getNS();
-
-      // socket.io
-      try {
-        const s = (typeof ensureSocket === 'function') ? ensureSocket() : null;
-        if (s && !hookInvalidators.__sock) {
-          hookInvalidators.__sock = true;
-          s.on("item:like", (p) => {
-            // 내 게시물인지 판정(간단히 owner.ns == 내 ns)
-            const ownerNS = String(p?.owner?.ns || p?.ns || "").toLowerCase();
-            if (ownerNS && ownerNS === ns) invalidate(ns);
-          });
-        }
-      } catch {}
-
-      // BroadcastChannel (다른 탭)
-      try {
-        if (window.__bcFeed && !hookInvalidators.__bc) {
-          hookInvalidators.__bc = true;
-          window.__bcFeed.addEventListener("message", (e) => {
-            const m = e?.data; if (!m || m.kind !== (window.FEED_EVENT_KIND || "feed:event")) return;
-            const type = m?.payload?.type;
-            const data = m?.payload?.data;
-            if (type === "item:like") {
-              const ownerNS = String(data?.owner?.ns || data?.ns || "").toLowerCase();
-              if (ownerNS && ownerNS === ns) invalidate(ns);
-            }
-            if (type === "item:removed") {
-              // 내 글 삭제 시에도 합계 변동 → 무효화
-              invalidate(ns);
-            }
-          });
-        }
-      } catch {}
-
-      // 로그인/NS 변경 시 분리 캐시 유지(무효화는 필요 X)
-      window.addEventListener("store:ns-changed", ()=>{/* ns별 키라 충돌 없음 */});
-    }
-    hookInvalidators();
-
-    // 공개 API
-    window.mineHearts = { get, _compute: compute };
   })();
 
 })();
