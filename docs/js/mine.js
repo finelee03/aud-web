@@ -1222,19 +1222,28 @@ const LikeCache = (() => {
       const id  = String(p?.id || p?.itemId || '');
       if (!id) return;
       const ns  = String(p?.ns || p?.item_ns || p?.item?.ns || getNS());
-      const liked = (p?.liked != null) ? !!p.liked : (p?.data?.liked ?? p?.item?.liked ?? null);
+      const incomingLiked = (p?.liked != null) ? !!p.liked : (p?.data?.liked ?? p?.item?.liked ?? null);
       const likes = (typeof p?.likes === 'number') ? p.likes : (p?.data?.likes ?? p?.item?.likes ?? null);
 
       const last = LAST.get(id) || 0;
       // 1.2s 내에 들어온 '상충' 이벤트는 무시(사용자 최신 의도 보호)
       if (Date.now() - last <= 1200) {
         const st = STATE.get(id);
-        if (st && liked != null && st.liked !== liked) return;
+        if (st && incomingLiked != null && st.liked !== incomingLiked) return;
       }
 
       // 정상 업데이트 반영
-      const nextLiked = (liked != null) ? liked : (STATE.get(id)?.liked ?? null);
-      const nextLikes = (typeof likes === 'number') ? likes : (STATE.get(id)?.likes ?? null);
+      const me = (typeof getMeId === 'function' && getMeId()) || window.__ME_ID || null;
+      const actorId = String(p?.by ?? p?.actor ?? p?.userId ?? p?.user_id ?? '') || null;
+      const isMineEvent = me && actorId && String(me) === String(actorId);
+
+      // likes는 항상 반영. liked는 '내 이벤트'에 한해서만 반영
+      const prev = STATE.get(id) || {};
+      const nextLiked = isMineEvent
+        ? (incomingLiked != null ? incomingLiked : prev.liked)
+        : prev.liked;
+      const nextLikes = (typeof likes === 'number') ? likes : prev.likes;
+
       commit(id, nextLiked, nextLikes);
       try { LikeCache?.set?.(ns, id, nextLiked, nextLikes); } catch {}
     } catch {}
@@ -1288,12 +1297,22 @@ const LikeCache = (() => {
     }
   }
 
-  // 공개 심볼 재지정
-  window.toggleLike = toggleLike;
-
   // 업그레이드 누락 보호(초기 로드시 SVG/색상 보정)
   try { window.upgradeHeartIconIn?.(document); } catch {}
 })();
+
+// NS/계정 전환 시 하트 메모리 초기화
+try {
+  window.addEventListener('store:ns-changed', () => {
+    try { window.__HEART_STATE?.clear?.(); } catch {}
+    try { window.__HEART_LAST?.clear?.(); } catch {}
+  });
+  window.addEventListener('auth:state', () => {
+    try { window.__HEART_STATE?.clear?.(); } catch {}
+    try { window.__HEART_LAST?.clear?.(); } catch {}
+  });
+} catch {}
+
 
 
   // -----------------------------------------------------------------------
