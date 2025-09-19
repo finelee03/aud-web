@@ -2227,6 +2227,9 @@ try {
         // localStorage.setItem("auth:userns", ns);
         window.dispatchEvent(new CustomEvent("store:ns-changed", { detail: ns }));
       } catch {}
+      
+      try { ensureFeedChannel(); } catch {}
+
       migrateMineOnlyFlagToNS();
       if (!flagged) setAuthedFlag();
       idle(() => rehydrateFromLocalStorageIfSessionAuthed());
@@ -2677,78 +2680,118 @@ try {
   })();
 
   /* =========================================================
-   * 12) BROADCAST CHANNEL (aud:sync:<ns>)
-   * ========================================================= */
-  try {
-    const __NS = (typeof getNS === "function" ? getNS() : (window.__STORE_NS || "default"));
-    const __K_LABEL = LABEL_SYNC_KEY;
-    const __K_JIB   = JIB_SYNC_KEY;
-    const __bc = new BroadcastChannel(`aud:sync:${__NS}`);
-    __bcFeed = __bc;
-    __bc.addEventListener("message", (e) => {
-      const m = e && e.data; if (!m || !m.kind) return;
+  * 12) BROADCAST CHANNEL (aud:sync:<ns>) — LAZY + REBIND
+  * ========================================================= */
+  let __bcNS = null;        // 현재 바인딩된 ns
+  let __bc = null;          // 현재 BroadcastChannel 인스턴스
 
-      if (m.kind === __K_LABEL && m.payload && Array.isArray(m.payload.arr)) {
-        if (window.store?.clear && window.store?.add) {
-          window.store.clear();
-          for (const lb of m.payload.arr) window.store.add(lb);
-        } else {
-          sessionStorage.setItem(REG_KEY, JSON.stringify(m.payload.arr));
-          window.dispatchEvent(new Event(EVT_LABEL));
-        }
-        try { (window.mineRenderAll?.() || window.scheduleRender?.()); } catch {}
-      }
+  function ensureFeedChannel() {
+    const ns = (typeof getNS === "function" ? getNS() : (window.__STORE_NS || "default")) || "default";
+    if (__bc && __bcNS === ns) return; // 이미 최신 NS로 연결됨
 
-      if (m.kind === __K_JIB && m.payload) {
-        if (m.payload.type === "set" && Array.isArray(m.payload.arr)) {
-          if (window.jib?.clear && window.jib?.add) {
-            window.jib.clear();
-            for (const k of m.payload.arr) window.jib.add(k);
-          } else {
-            sessionStorage.setItem(JIB_KEY, JSON.stringify(m.payload.arr));
-            window.dispatchEvent(new Event(EVT_JIB));
-          }
-          try { (window.mineRenderAll?.() || window.scheduleRender?.()); } catch {}
-        } else if (m.payload.type === "select") {
-          if (window.jib?.setSelected) window.jib.setSelected(m.payload.k ?? null);
-        }
-      }
+    // 채널 재바인딩
+    try { __bc?.close?.(); } catch {}
+    __bcNS = ns;
+    try {
+      __bc = new BroadcastChannel(`aud:sync:${ns}`);
+      __bcFeed = __bc;
 
-      if (m.kind === FEED_EVENT_KIND && m.payload) {
-        const { type, data } = m.payload;
-        if (type === "item:like")   try { window.applyItemLikeEvent?.(data); } catch {}
-        if (type === "vote:update") {
-          try {
-            const id = String(data?.id || data?.itemId || "");
-            if (!id) return;
-            const counts = data?.counts || data?.totals || data?.votes || data?.items || data?.data || {};
-            const my = data?.my ?? data?.mine ?? data?.choice ?? null;
-            POLL.updateEverywhere(id, counts, my);
-          } catch {}
-        }
+      // 현재 시점의 키를 캡처해 핸들러 내부에서 사용
+      const __K_LABEL = LABEL_SYNC_KEY;
+      const __K_JIB   = JIB_SYNC_KEY;
 
-        if (type === "item:removed") {
-          try {
-            const id = String(data?.id || data?.itemId || "");
-            if (!id) return;
-            removeItemEverywhere(id);
-            const openCard = document.querySelector('#post-modal .feed-card[data-id]');
-            if (openCard && String(openCard.getAttribute('data-id')) === id) {
-              document.querySelector('.pm-close')?.click();
+      __bc.addEventListener("message", (e) => {
+        const m = e && e.data; if (!m || !m.kind) return;
+
+        // ===== 라벨/지비츠 동기화 수신 =====
+        if (m.kind === __K_LABEL && m.payload) {
+          if (m.payload.type === "set" && Array.isArray(m.payload.arr)) {
+            if (window.store?.clear && window.store?.add) {
+              window.store.clear();
+              for (const lb of m.payload.arr) window.store.add(lb);
+            } else {
+              try { sessionStorage.setItem("collectedLabels", JSON.stringify(m.payload.arr)); } catch {}
+              try { window.dispatchEvent(new Event((window.LABEL_COLLECTED_EVT||"collectedLabels:changed"))); } catch {}
             }
-          } catch {}
+            try { (window.mineRenderAll?.() || window.scheduleRender?.()); } catch {}
+          } else if (m.payload.type === "select") {
+            if (window.store?.setSelected) window.store.setSelected(m.payload.label ?? null);
+          }
+          return;
         }
 
-      }
-    });
-  } catch {}
+        if (m.kind === __K_JIB && m.payload) {
+          if (m.payload.type === "set" && Array.isArray(m.payload.arr)) {
+            if (window.jib?.clear && window.jib?.add) {
+              window.jib.clear();
+              for (const k of m.payload.arr) window.jib.add(k);
+            } else {
+              try { sessionStorage.setItem("jib:collected", JSON.stringify(m.payload.arr)); } catch {}
+              try { window.dispatchEvent(new Event((window.JIB_COLLECTED_EVT||"jib:collection-changed"))); } catch {}
+            }
+            try { (window.mineRenderAll?.() || window.scheduleRender?.()); } catch {}
+            return;
+          }
+          if (m.payload.type === "select") {
+            if (window.jib?.setSelected) window.jib.setSelected(m.payload.k ?? null);
+            return;
+          }
+        }
+
+        // ===== FEED 이벤트 중계 수신 =====
+        if (m.kind === (window.FEED_EVENT_KIND || "feed:event") && m.payload) {
+          const { type, data } = m.payload;
+
+          if (type === "item:like") {
+            try { window.applyItemLikeEvent?.(data); } catch {}
+            return;
+          }
+
+          if (type === "vote:update") {
+            try {
+              const id = String(data?.id || data?.itemId || "");
+              if (!id) return;
+              const counts = data?.counts || data?.totals || data?.votes || data?.items || data?.data || {};
+              const my     = data?.my ?? data?.mine ?? data?.choice ?? null;
+              POLL.updateEverywhere(id, counts, my);
+            } catch {}
+            return;
+          }
+
+          if (type === "item:removed") {
+            try {
+              const id = String(data?.id || data?.itemId || "");
+              if (!id) return;
+              removeItemEverywhere(id);
+              const openCard = document.querySelector('#post-modal .feed-card[data-id]');
+              if (openCard && String(openCard.getAttribute('data-id')) === id) {
+                document.querySelector('.pm-close')?.click();
+              }
+            } catch {}
+            return;
+          }
+        }
+      });
+    } catch {}
+  }
+
+  // 최초 진입 시 한 번 보장
+  ensureFeedChannel();
+
+  // NS / 인증 상태가 바뀌면 즉시 재바인딩
+  window.addEventListener("store:ns-changed", ensureFeedChannel);
+  window.addEventListener("auth:state", ensureFeedChannel);
+
 
   // === FEED → other tabs (me.html) 알림 브릿지: 내가 한 행동을 방송 ===
   function bcNotifySelf(type, data){
-    // BroadcastChannel
+    // 채널이 항상 최신 NS로 열려 있도록 보장
+    try { ensureFeedChannel(); } catch {}
+
+    // BroadcastChannel 브로드캐스트
     try { __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type, data } }); } catch {}
 
-    // localStorage 폴백 (다른 탭의 storage 이벤트가 받음)
+    // localStorage 폴백(동일 NS 키에만 기록)
     try {
       const ns = (typeof getNS === 'function' ? getNS() : 'default');
       localStorage.setItem(`notify:self:${ns}`, JSON.stringify({ type, data, t: Date.now() }));
