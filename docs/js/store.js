@@ -17,6 +17,8 @@ const VERSION     = 1;
 const GALLERY_EVENT = "sdf:gallery-changed";
 const GUEST_BUS_KEY = "guest:bus";
 
+const AUTO_MIGRATE_GUEST_TO_USER = false;
+
 /* ── auth 세션 플래그: 탭 생존 동안 유지 ───────────────────*/
 const AUTH_FLAG_KEY = "auth:flag";
 function hasAuthedFlag(){ try{ return sessionStorage.getItem(AUTH_FLAG_KEY) === "1"; }catch{ return false; } }
@@ -122,6 +124,7 @@ window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
 
   function nsKeyFor(ns, base){ return `${base}:${ns}`; }
   function migrateIfNeeded(fromNS = "default", toNS = USER_NS){
+    if (!AUTO_MIGRATE_GUEST_TO_USER) return; // ★ 자동 이관 끔
     try{
       if (!toNS || toNS === "default") return; // 게스트→게스트는 패스
       const markKey = `__migrated:${toNS}`;
@@ -167,6 +170,7 @@ window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
       migrateIfNeeded(from, USER_NS);
       last = USER_NS;
       try { window.dispatchEvent(new CustomEvent("store:ns-changed", { detail: USER_NS })); } catch {}
+      try { rebindNS(); } catch {}
     }catch{}
   }
 
@@ -1054,8 +1058,28 @@ function rehydrateFromSnapshots(){
   }catch{}
 }
 
+// ── NS별 세션 키를 깨끗하게 비우는 헬퍼
+function __clearSessionStateForNS(ns){
+  const bases = [
+    "collectedLabels","tempCollectedLabels","labelTimestamps","labelHearts",
+    "aud:selectedLabel","jib:selected","jib:collected","sdf-session-init-v1"
+  ];
+  for (const base of bases){
+    try { sessionStorage.removeItem(`${base}:${ns}`); } catch {}
+  }
+}
+
+// ── (선택) 인사이트 캐시도 정리
+function __clearInsightsForNS(ns){
+  try { sessionStorage.removeItem(`insights:${(ns||"default").toLowerCase()}`); } catch {}
+}
+
+
 // NS가 바뀌었을 때 한 번에 처리
 function rebindNS(){
+  // ★ 이전 NS를 먼저 저장
+  const prev = (typeof USER_NS !== "undefined" ? USER_NS : "default");
+
   const next = (()=>{
     try{
       return (window.auth?.isAuthed?.())
@@ -1065,6 +1089,9 @@ function rebindNS(){
   })();
   if (next === USER_NS) return;
 
+  // ★ 이전 NS 세션 흔적 제거
+  try { __clearSessionStateForNS(prev); __clearInsightsForNS(prev); } catch {}
+
   USER_NS = next;
   window.__STORE_NS = USER_NS;
   recalcKeys();
@@ -1073,7 +1100,10 @@ function rebindNS(){
   BC_NAME = `aud:sync:${USER_NS}`;
   bc = openBC(BC_NAME);
 
+  // ★ 새 NS 기준으로 로컬 미러 → 세션 재하이드레이트
   rehydrateFromSnapshots();
+
+  // ★ 서버 상태 강제 pull
   pulledOnceFromServer = false;
   pullStateFromServerOnce();
 }
@@ -1260,8 +1290,24 @@ window.__SERVER_GALLERY_SYNC_ON = SERVER_GALLERY_SYNC_ON;
   async function performLogout() {
     try { await window.__flushStoreSnapshot({ server: true }); } catch {}
     sendLogoutBeaconOnce();
+
+    // ★ auth 관련 흔적을 세션/로컬 모두 제거
     try { sessionStorage.removeItem("auth:flag"); } catch {}
+    try { localStorage.removeItem("auth:flag"); } catch {}
+    try { localStorage.removeItem("auth:userns"); } catch {}
+
+    // ★ 게스트 초기화를 다시 걸 수 있도록 세션 플래그/인사이트 제거
+    try { sessionStorage.removeItem(`sdf-session-init-v1:default`); } catch {}
+    try {
+      const ns = (window.__STORE_NS || "default");
+      __clearSessionStateForNS(ns);
+      __clearInsightsForNS(ns);
+    } catch {}
+
+    // 상태 브로드캐스트
     window.dispatchEvent(new CustomEvent("auth:state", { detail: { ready: true, authed: false } }));
+
+    // 페이지 이동
     location.href = "./login.html#loggedout";
   }
 
