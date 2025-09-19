@@ -953,8 +953,9 @@ const LikeCache = (() => {
       const id  = String(rawId);
       const idx = FEED.idxById.get(id);
       const viewerNS = (window.getNS ? getNS() : "default");
+      const itemNS   = (typeof idx === "number" && FEED.items[idx]?.ns) ? FEED.items[idx].ns : viewerNS;
       const pid = encodeURIComponent(id);
-      const nsq = `ns=${encodeURIComponent(ns)}`;
+      const nsq = `ns=${encodeURIComponent(itemNS)}`;
 
       // 1) /api/items/:id
       try {
@@ -2525,7 +2526,7 @@ const LikeCache = (() => {
 
       // 2) LikeCache(영속)로 보정
       try {
-        const rec = (typeof LikeCache?.get === "function") ? LikeCache.get(nsOf(it), String(it.id)) : null;
+        const rec = (typeof LikeCache?.get === "function") ? LikeCache.get(viewerNS(), String(it.id)) : null;
         if (rec) {
           it.liked = rec.liked;
           if (typeof rec.likes === "number") it.likes = rec.likes;
