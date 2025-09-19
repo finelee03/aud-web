@@ -173,6 +173,10 @@ function pageHref(rel = "") {
   return ghPrefix() + String(rel).replace(/^\//, "");
 }
 
+function getNS(){
+  try { return (localStorage.getItem("auth:userns") || "default").trim().toLowerCase(); }
+  catch { return "default"; }
+}
 
 /* ========================================================================== *
  * 1) SMALL UTILS (safe JSON, clamp, DPR, etc.)
@@ -1784,13 +1788,48 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
     fd.append("author", JSON.stringify(a));   // 혹시 author만 읽는 서버 대비
   }
 
-/* ========================================================================== *
- * FEED — Unified Post Flow (No-inline-CSS, DRY)
- * - 공통 유틸/뷰를 한 번만 정의하고 1-STEP / 3-STEP이 함께 사용
- * - 스타일은 전부 CSS 클래스로 (동적 위치 계산 등 불가피한 부분만 style 변수 사용)
- * ========================================================================== */
-(function FeedUnified(){
-  "use strict";
+
+  /* ========================================================================== *
+  * FEED — Unified Post Flow (No-inline-CSS, DRY)
+  * - 공통 유틸/뷰를 한 번만 정의하고 1-STEP / 3-STEP이 함께 사용
+  * - 스타일은 전부 CSS 클래스로 (동적 위치 계산 등 불가피한 부분만 style 변수 사용)
+  * ========================================================================== */
+  // blob → 패딩 적용된 dataURL (미리보기용, 1024px 기준)
+  async function makePaddedPreviewDataURL(blob, padPct = 8, sizeHint = 1024) {
+    // 1) Blob -> Image
+    const img = await (async (b) => {
+      const fr = new FileReader();
+      const p = new Promise((res, rej) => {
+        fr.onload = () => {
+          const im = new Image();
+          im.onload = () => res(im);
+          im.onerror = rej;
+          im.src = fr.result;
+        };
+        fr.onerror = rej;
+      });
+      fr.readAsDataURL(b);
+      return p;
+    })(blob);
+
+    // 2) 임시 캔버스에 그리기
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0);
+
+    // 3) 트림+패딩+정사각 → dataURL
+    const size = Math.max(512, Math.min(1536, sizeHint || Math.max(c.width, c.height)));
+    const padded = SDF.Utils.trimAndPadToSquare(c, {
+      padding: Math.max(0, Math.min(45, +padPct)) / 100,
+      size
+    });
+    return padded.toDataURL("image/png");
+  }
+
+
+  (function FeedUnified(){
+    "use strict";
 
   // ─────────────────────────────────────────────────────────────
   // 0) Namespace & Small Utilities (공통)
@@ -1807,7 +1846,6 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
     else document.addEventListener("DOMContentLoaded", cb, { once:true });
   });
 
-  function getNS(){ return (localStorage.getItem("auth:userns") || "default").trim().toLowerCase(); }
   function getLabel(){
     try{
       if (typeof window.readSelected === "function"){
@@ -1827,7 +1865,7 @@ function goMineAfterShare(label = getLabel()) {
       window.setSelectedLabel(label);
     }
   } catch {}
-  const url = pageHref("/mine.html")+ "?label=${encodeURIComponent(label)}&posted=1";
+  const url = `${pageHref("/mine.html")}?label=${encodeURIComponent(label)}&posted=1`;
   // 뒤로가기로 작성 화면 복귀를 허용하려면 assign, 히스토리 덮으려면 replace
   location.assign(url);
 }
@@ -2278,7 +2316,19 @@ function goMineAfterShare(label = getLabel()) {
       const body  = document.createElement("div"); body.className = "im-body";
       const left  = document.createElement("div"); left.className = "im-left";
       const stage = document.createElement("div"); stage.className = "im-stage has-image";
-      const img   = document.createElement("img"); img.src = url; img.alt = "";
+      const img   = document.createElement("img");
+      img.alt = "";
+
+      // [미리보기] 원본 blob 기준 패딩 적용해서 dataURL로 갱신
+      let previewTick = 0;
+      async function refreshPreviewDebounced() {
+        const my = ++previewTick;
+        try {
+          const du = await makePaddedPreviewDataURL(blob, padPct, 1024);
+          if (my !== previewTick) return; // 최신 호출만 반영
+          img.src = du;
+        } catch {}
+      }
       stage.append(img); left.append(stage);
 
       const right = document.createElement("div"); right.className = "im-right";
@@ -2328,7 +2378,11 @@ function goMineAfterShare(label = getLabel()) {
       const padVal = document.createElement("span");
       padVal.className = "im-pad-val";
       padVal.textContent = padPct + "%";
-      padInput.addEventListener("input", () => { padPct = +padInput.value; padVal.textContent = padPct + "%"; });
+      padInput.addEventListener("input", () => {
+        padPct = +padInput.value;
+        padVal.textContent = padPct + "%";
+        refreshPreviewDebounced();
+      });
       padRow.append(padInput, padVal);
       padGroup.append(padRow);
 
@@ -2336,6 +2390,7 @@ function goMineAfterShare(label = getLabel()) {
       body.append(left, right);
       shell.append(head, body);
       back.append(shell);
+      refreshPreviewDebounced();
 
       // 전역 X
       const globalClose = document.createElement("button");
@@ -2448,7 +2503,11 @@ function goMineAfterShare(label = getLabel()) {
     const padVal = document.createElement("span");
     padVal.className = "im-pad-val";
     padVal.textContent = padPct + "%";
-    padInput.addEventListener("input", ()=>{ padPct = +padInput.value; padVal.textContent = padPct + "%"; });
+    padInput.addEventListener("input", ()=>{
+      padPct = +padInput.value;
+      padVal.textContent = padPct + "%";
+      refreshPreviewDebounced();
+    });
     padRow.append(padInput, padVal);
     padGroup.append(padRow);
 
@@ -2469,11 +2528,23 @@ function goMineAfterShare(label = getLabel()) {
 
     // 상태
     const state = { blob:null, w:0, h:0 };
+    let previewTick = 0;
+    async function refreshPreviewDebounced(){
+      if (!state.blob) return;
+      const my = ++previewTick;
+      try {
+        const du = await makePaddedPreviewDataURL(state.blob, padPct, 1024);
+        if (my !== previewTick) return;
+        stageImg.src = du;
+      } catch {}
+    }
 
     function applySelection(b, w, h){
       state.blob = b; state.w = w|0; state.h = h|0;
       if (b){
-        const url = URL.createObjectURL(b);
+      stage.classList.add("has-image");
+      // 패딩 반영된 미리보기 생성
+      refreshPreviewDebounced();
         stageImg.src = url;
         stage.classList.add("has-image");
         stageImg.addEventListener("load", ()=> URL.revokeObjectURL(url), { once:true });
