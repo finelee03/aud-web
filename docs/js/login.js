@@ -250,6 +250,23 @@
       window.dispatchEvent(new CustomEvent("auth:state", { detail: { ready:true, authed:true, ns, user } }));
     } catch {}
 
+    // [ADD] 로그인 직후 이메일에서 이름 자동 생성 + 캐시 + 브로드캐스트
+    try {
+      const eml = String(user?.email || "").trim().toLowerCase();
+      // '+' 태그 제거 후 @ 앞부분만 추출 (e.g., 'john.doe+test@x.com' -> 'john.doe')
+      const localPart = eml ? eml.split("@")[0].split("+")[0] : "member";
+      const detail = {
+        id: (user?.id ?? null),
+        displayName: localPart || "member",
+        avatarUrl: "",
+        rev: Date.now()
+      };
+      // mine.js는 legacy 키('me:profile') 스토리지 이벤트를 이미 구독함
+      localStorage.setItem("me:profile", JSON.stringify(detail));
+      // 즉시 반영을 원하는 현재 탭에도 이벤트 발행
+      window.dispatchEvent(new CustomEvent("user:updated", { detail }));
+    } catch {}
+
     gotoNext();
   }
 

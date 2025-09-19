@@ -383,7 +383,7 @@
   }
 
   function renderProfile({ name, displayName, email, avatarUrl }) {
-    const nm = name || displayName || "member";
+    const nm = name || displayName || (email ? String(email).split("@")[0] : "member");
     ME_STATE.displayName = nm;
     ME_STATE.email = email || "";
     ME_STATE.avatarUrl = avatarUrl || "";
