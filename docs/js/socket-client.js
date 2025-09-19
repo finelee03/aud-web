@@ -3,50 +3,73 @@
 
   const MAX_LOGS = 500;
 
-  function log(msg) {
+  // 안전 stringify
+  function safeStringify(v) {
+    try { return typeof v === "string" ? v : JSON.stringify(v); }
+    catch { return "[unserializable]"; }
+  }
+
+  const pendingLogs = [];
+  function flushPendingLogs() {
     const el = document.getElementById("log");
-    if (!el) return;
-    const div = document.createElement("div");
-    const ts = new Date().toLocaleTimeString();
-    // 너무 길면 잘라서 DOM 폭주 방지
-    const text = typeof msg === "string" ? msg : JSON.stringify(msg);
-    div.textContent = `[${ts}] ${text.length > 2000 ? text.slice(0, 2000) + "…(trunc)" : text}`;
-    el.appendChild(div);
-    // 오래된 로그 정리
-    while (el.children.length > MAX_LOGS) el.removeChild(el.firstChild);
-    // 맨 아래로 스크롤
+    if (!el || pendingLogs.length === 0) return;
+    for (const m of pendingLogs.splice(0)) _appendLog(el, m);
     el.scrollTop = el.scrollHeight;
   }
 
-  // 전역 노출 원래 함수 유지(선택)
+  function _appendLog(el, text) {
+    const div = document.createElement("div");
+    const ts = new Date().toLocaleTimeString();
+    const t = text.length > 2000 ? text.slice(0, 2000) + "…(trunc)" : text;
+    div.textContent = `[${ts}] ${t}`;
+    el.appendChild(div);
+    while (el.children.length > MAX_LOGS) el.removeChild(el.firstChild);
+  }
+
+  function log(msg) {
+    const el = document.getElementById("log");
+    const text = safeStringify(msg);
+    if (!el) { pendingLogs.push(text); return; }
+    _appendLog(el, text);
+    el.scrollTop = el.scrollHeight;
+  }
   window.log = window.log || log;
 
+  // 소켓별 1회 부착
+  const attached = new WeakSet();
   function attachSockHandlers(sock) {
-    if (!sock || attachSockHandlers.__done) return;
-    attachSockHandlers.__done = true;
+    if (!sock || attached.has(sock)) return;
+    attached.add(sock);
 
     sock.on("connect",         () => log("[sock] connected"));
     sock.on("disconnect",      (r) => log("[sock] disconnected: " + r));
-    sock.on("reconnect",       () => log("[sock] reconnected"));
     sock.on("reconnect_error", (e) => log("[sock] reconnect_error " + (e?.message || "")));
     sock.on("connect_error",   (e) => log("[sock] connect_error " + (e?.message || "")));
 
-    // NFC 브로드캐스트
-    sock.on("nfc", (evt) => {
-      try { log("[NFC] " + JSON.stringify(evt)); }
-      catch { log("[NFC] (unserializable event)"); }
-    });
+    // 필요 시 매니저 레벨 이벤트도 확인
+    if (sock.io) {
+      sock.io.on("reconnect_attempt", (n) => log("[sock.io] reconnect_attempt " + n));
+      sock.io.on("reconnect", () => log("[sock.io] reconnect"));
+    }
+
+    sock.on("nfc", (evt) => log("[NFC] " + safeStringify(evt)));
   }
 
-  // 1) 이미 만들어져 있으면 즉시 부착
+  // 최초/이후 준비 케이스 모두 커버
   if (window.sock) attachSockHandlers(window.sock);
 
-  // 2) 나중에 준비되는 경우도 커버
   if (window.sockReady && typeof window.sockReady.then === "function") {
-    window.sockReady.then(attachSockHandlers).catch(() => {});
+    window.sockReady.then((s) => { attachSockHandlers(s); flushPendingLogs(); }).catch(() => {});
   } else {
     window.addEventListener("sock:ready", () => {
-      if (window.sock) attachSockHandlers(window.sock);
+      if (window.sock) { attachSockHandlers(window.sock); flushPendingLogs(); }
     }, { once: true });
+  }
+
+  // DOM이 나중에 그려지는 경우도 처리
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", flushPendingLogs, { once: true });
+  } else {
+    flushPendingLogs();
   }
 })();
