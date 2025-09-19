@@ -361,12 +361,12 @@ function createHeartSVG({ filled, color = "#777" }){
   const svg  = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("focusable", "false");
+  svg.style.display="block";
   const path = document.createElementNS("http://www.w3.org/2000/svg","path");
   path.setAttribute("d", HEART_D);
-  path.setAttribute("fill", "none");
-  path.setAttribute("stroke", "#777");
-  path.setAttribute("stroke-width", "1.3");
+  path.setAttribute("fill", filled ? color : "none");
+  path.setAttribute("stroke", filled ? color : "#777");
+  path.setAttribute("stroke-width", filled ? "0" : "1.5");
   svg.appendChild(path);
   return svg;
 }
