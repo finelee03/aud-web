@@ -821,7 +821,11 @@ const LikeCache = (() => {
 
 
   const nsOf = (item) => String(item?.ns ?? "default").trim().toLowerCase();
-  const blobURL = (item) => toAPI(`/api/gallery/${encodeURIComponent(item.id)}/blob`);
+  const imageURL = (item) => {
+    const ns  = String(item?.ns || 'default').trim().toLowerCase();
+    const ext = String(item?.ext || 'webp').replace(/[^a-z0-9]/gi,'').toLowerCase();
+    return `/uploads/${encodeURIComponent(ns)}/${encodeURIComponent(item.id)}.${ext}`;
+  };
   const fmtDate = (ts) => {
     try {
       const d = new Date(Number(ts) || Date.now());
@@ -876,7 +880,7 @@ const LikeCache = (() => {
     return `
     <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
       <div class="media">
-        <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
+        <img src="${imageURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
         <div class="hover-ui" role="group" aria-label="Post actions">
           <div class="actions">
             <div class="stat" data-like-readonly>
@@ -953,25 +957,10 @@ const LikeCache = (() => {
       const idx = FEED.idxById.get(id);
       const ns  = (typeof idx === "number" && FEED.items[idx]?.ns) ? FEED.items[idx].ns : (window.getNS ? getNS() : "default");
       const pid = encodeURIComponent(id);
-      const nsq = `ns=${encodeURIComponent(ns)}`;
 
       // 1) /api/items/:id
       try {
-        const r = await api(`/api/items/${pid}?${nsq}`, { credentials: "include", cache: "no-store" });
-        const j = await r.json().catch(() => ({}));
-        if (r.ok) {
-          const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-          LikeCache.mergeServer(ns, id, liked, likes); // [ADD]
-          const pref = LikeCache.get(ns, id);
-          const L = (pref && pref.liked != null) ? pref.liked : liked;
-          const C = (pref && typeof pref.likes === "number") ? pref.likes : likes;
-          applyUI(id, L, C); 
-          return;
-        }} catch {}
-
-      // 2) /api/gallery/:id (폴백)
-      try {
-        const r = await api(`/api/gallery/${pid}?${nsq}`, { credentials: "include", cache: "no-store" });
+        const r = await api(`/api/items/${pid}`, { credentials: "include", cache: "no-store" });
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
@@ -1167,12 +1156,11 @@ const LikeCache = (() => {
       headers: body ? { 'Content-Type':'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined
     });
-    const bases = ['items','gallery'];
-    for (const b of bases){
-      const u = `/api/${b}/${encodeURIComponent(id)}/like?ns=${encodeURIComponent(ns)}`;
-      let r = await api(u, await mk('PUT', { like: !!wantLike }));
-      if (!r?.ok && wantLike === false) r = await api(u, await mk('DELETE'));
-      if (r?.ok){
+  {
+    const u = `/api/items/${encodeURIComponent(id)}/like`;
+    let r = await api(u, await mk('PUT', { like: !!wantLike }));
+    if (!r?.ok && wantLike === false) r = await api(u, await mk('DELETE'));
+    if (r?.ok){
         let j={}; try{ if (r.status!==204) j = await r.json(); }catch{}
         const liked = j?.liked ?? j?.item?.liked ?? j?.data?.liked;
         const likes = j?.likes ?? j?.item?.likes ?? j?.data?.likes;
@@ -1196,8 +1184,7 @@ const LikeCache = (() => {
         };
       }catch{ return null; }
     };
-    return (await tryGet(`/api/items/${encodeURIComponent(id)}?ns=${encodeURIComponent(ns)}`))
-        || (await tryGet(`/api/gallery/${encodeURIComponent(id)}?ns=${encodeURIComponent(ns)}`))
+    return (await tryGet(`/api/items/${encodeURIComponent(id)}`))
         || null;
   }
 
@@ -1424,16 +1411,9 @@ try {
       let r, j = {};
 
       // ✅ 1순위: /api/items/:id
-      r = await api(`/api/items/${encodeURIComponent(item.id)}?ns=${encodeURIComponent(ns)}`,
+      r = await api(`/api/items/${encodeURIComponent(item.id)}`,
                     { credentials:'include', cache:'no-store' });
       j = await r.json().catch(() => ({}));
-
-      // 폴백: /api/gallery/:id
-      if (!r.ok) {
-        r = await api(`/api/gallery/${encodeURIComponent(item.id)}?ns=${encodeURIComponent(ns)}`,
-                      { credentials:'include', cache:'no-store' });
-        j = await r.json().catch(() => ({}));
-      }
 
       const pickUser = (o) => (o?.user || o?.item?.user || o?.data?.user || null);
       const u = pickUser(j);
@@ -1460,14 +1440,14 @@ try {
 
     // 1) 표준 REST: DELETE /api/items/:id
     let r = await api(
-      `/api/items/${encodeURIComponent(id)}?ns=${encodeURIComponent(ns)}`,
+      `/api/items/${encodeURIComponent(id)}`,
       await withCSRF({ method: "DELETE", credentials: "include" })
     );
 
     // 2) 구환경 폴백: POST /api/items/:id/delete
     if (!r.ok && (r.status === 404 || r.status === 405)) {
       r = await api(
-        `/api/items/${encodeURIComponent(id)}/delete?ns=${encodeURIComponent(ns)}`,
+        `/api/items/${encodeURIComponent(id)}/delete`,
         await withCSRF({ method: "POST", credentials: "include" })
       );
     }
@@ -1475,7 +1455,7 @@ try {
     // 3) 최후 폴백: POST /api/delete?item=ID
     if (!r.ok && (r.status === 404 || r.status === 405)) {
       r = await api(
-        `/api/delete?item=${encodeURIComponent(id)}&ns=${encodeURIComponent(ns)}`,
+        `/api/delete?item=${encodeURIComponent(id)}`,
         await withCSRF({ method: "POST", credentials: "include" })
       );
     }
@@ -1640,11 +1620,10 @@ try {
     // [REPLACE] 표준 → 대체 → 메타 추출 순으로 시도
     async function fetchVotes(itemId, ns) {
       const pid = encodeURIComponent(itemId);
-      const nsq = `ns=${encodeURIComponent(ns)}`;
 
       // 1) 표준: GET /api/items/:id/votes
       try {
-        const r = await api(`/api/items/${pid}/votes?${nsq}`, { credentials: 'include', cache: 'no-store' });
+        const r = await api(`/api/items/${pid}/votes`, { credentials: 'include', cache: 'no-store' });
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const picked = pickVotesFrom(j) || pickVotesFrom(j.item) || pickVotesFrom(j.data);
@@ -1654,7 +1633,7 @@ try {
 
       // 2) 대체: GET /api/votes?item=ID
       try {
-        const r = await api(`/api/votes?item=${pid}&${nsq}`, { credentials: 'include', cache: 'no-store' });
+        const r = await api(`/api/votes?item=${pid}`, { credentials: 'include', cache: 'no-store' });
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const picked = pickVotesFrom(j) || pickVotesFrom(j.item) || pickVotesFrom(j.data);
@@ -1664,7 +1643,7 @@ try {
 
       // 3) 메타 혼합: GET /api/items/:id → 필드에서 추출 (완전 폴백)
       try {
-        const r = await api(`/api/items/${pid}?${nsq}`, { credentials: 'include', cache: 'no-store' });
+        const r = await api(`/api/items/${pid}`, { credentials: 'include', cache: 'no-store' });
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const picked = pickVotesFrom(j) || pickVotesFrom(j.item) || pickVotesFrom(j.data);
@@ -1681,18 +1660,17 @@ try {
     async function castVote(itemId, label, ns) {
       await ensureCSRF();
       const pid = encodeURIComponent(itemId);
-      const nsq = `ns=${encodeURIComponent(ns)}`;
 
       // 1) 신형: PUT /items/:id/vote?label=...
       let r = await api(
-        `/api/items/${pid}/vote?${nsq}&label=${encodeURIComponent(label)}`,
+        `/api/items/${pid}/vote?label=${encodeURIComponent(label)}`,
         await withCSRF({ method: "PUT", credentials: "include" })
       );
 
       // 2) 신형(바디 JSON)
       if (!r.ok) {
         r = await api(
-          `/api/items/${pid}/vote?${nsq}`,
+          `/api/items/${pid}/vote`,
           await withCSRF({
             method: "PUT",
             credentials: "include",
@@ -1705,7 +1683,7 @@ try {
       // 3) 구형: POST /items/:id/votes
       if (!r.ok) {
         r = await api(
-          `/api/items/${pid}/votes?${nsq}`,
+          `/api/items/${pid}/votes`,
           await withCSRF({
             method: "POST",
             credentials: "include",
@@ -1718,7 +1696,7 @@ try {
       // 4) 레거시: POST /api/votes
       if (!r.ok) {
         r = await api(
-          `/api/votes?${nsq}`,
+          `/api/votes`,
           await withCSRF({
             method: "POST",
             credentials: "include",
@@ -1741,18 +1719,17 @@ try {
     async function unvote(itemId, ns) {
       await ensureCSRF();
       const pid = encodeURIComponent(itemId);
-      const nsq = `ns=${encodeURIComponent(ns)}`;
 
       // 1) 신형: DELETE /items/:id/vote
       let r = await api(
-        `/api/items/${pid}/vote?${nsq}`,
+        `/api/items/${pid}/vote`,
         await withCSRF({ method: "DELETE", credentials: "include" })
       );
 
       // 2) 신형(복수): DELETE /items/:id/votes
       if (!r.ok) {
         r = await api(
-          `/api/items/${pid}/votes?${nsq}`,
+          `/api/items/${pid}/votes`,
           await withCSRF({ method: "DELETE", credentials: "include" })
         );
       }
@@ -1760,7 +1737,7 @@ try {
       // 3) 레거시: DELETE /api/votes?item=ID
       if (!r.ok) {
         r = await api(
-          `/api/votes?item=${pid}&${nsq}`,
+          `/api/votes?item=${pid}`,
           await withCSRF({ method: "DELETE", credentials: "include" })
         );
       }
@@ -1768,12 +1745,12 @@ try {
       // 4) 아주 레거시: POST /items/:id/unvote, /api/unvote
       if (!r.ok) {
         r = await api(
-          `/api/items/${pid}/unvote?${nsq}`,
+          `/api/items/${pid}/unvote`,
           await withCSRF({ method: "POST", credentials: "include" })
         );
         if (!r.ok) {
           r = await api(
-            `/api/unvote?item=${pid}&${nsq}`,
+            `/api/unvote?item=${pid}`,
             await withCSRF({ method: "POST", credentials: "include" })
           );
         }
@@ -2227,7 +2204,7 @@ try {
         // localStorage.setItem("auth:userns", ns);
         window.dispatchEvent(new CustomEvent("store:ns-changed", { detail: ns }));
       } catch {}
-      
+
       try { ensureFeedChannel(); } catch {}
 
       migrateMineOnlyFlagToNS();
@@ -2443,7 +2420,7 @@ try {
         <div class="pm-layout">
           <div class="pm-left">
             <div class="media">
-              <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
+              <img src="${imageURL(item)}" alt="${safeLabel || 'item'}" />
             </div>
           </div>
 
@@ -2501,16 +2478,9 @@ try {
         let r, j = {};
 
         // ✅ 1순위: /api/items/:id
-        r = await api(`/api/items/${encodeURIComponent(item.id)}?ns=${encodeURIComponent(ns)}`,
+        r = await api(`/api/items/${encodeURIComponent(item.id)}`,
                       { credentials:'include', cache:'no-store' });
         j = await r.json().catch(() => ({}));
-
-        // 폴백: /api/gallery/:id  (서버에 있을 수도 있으니 최후에만 시도)
-        if (!r.ok) {
-          r = await api(`/api/gallery/${encodeURIComponent(item.id)}?ns=${encodeURIComponent(ns)}`,
-                        { credentials:'include', cache:'no-store' });
-          j = await r.json().catch(() => ({}));
-        }
 
         const pickText = (o) => {
           if (!o || typeof o !== 'object') return '';
@@ -2909,17 +2879,17 @@ try {
       return { counts: c, total };
     }
     async function fetchVotesSafe(itemId, ns){
-      const pid = encodeURIComponent(itemId); const nsq = `ns=${encodeURIComponent(ns)}`;
+      const pid = encodeURIComponent(itemId);
       // 1) /items/:id/votes
-      try { const r = await api(`/api/items/${pid}/votes?${nsq}`, { credentials:"include", cache:"no-store" });
+      try { const r = await api(`/api/items/${pid}/votes`, { credentials:"include", cache:"no-store" });
         const j = await r?.json()?.catch?.(()=>({})); if (r?.ok) return pickVotesFrom(j?.data ?? j?.item ?? j ?? {});
       } catch {}
       // 2) /votes?item=
-      try { const r = await api(`/api/votes?item=${pid}&${nsq}`, { credentials:"include", cache:"no-store" });
+      try { const r = await api(`/api/votes?item=${pid}`, { credentials:"include", cache:"no-store" });
         const j = await r?.json()?.catch?.(()=>({})); if (r?.ok) return pickVotesFrom(j?.data ?? j?.item ?? j ?? {});
       } catch {}
       // 3) /items/:id
-      try { const r = await api(`/api/items/${pid}?${nsq}`, { credentials:"include", cache:"no-store" });
+      try { const r = await api(`/api/items/${pid}`, { credentials:"include", cache:"no-store" });
         const j = await r?.json()?.catch?.(()=>({})); if (r?.ok) return pickVotesFrom(j?.data ?? j?.item ?? j ?? {});
       } catch {}
       return { counts: emptyCounts(), total: 0 };
