@@ -361,15 +361,29 @@ function createHeartSVG({ filled, color = "#777" }){
   const svg  = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
-  svg.style.display="block";
+  svg.setAttribute("focusable", "false");
   const path = document.createElementNS("http://www.w3.org/2000/svg","path");
   path.setAttribute("d", HEART_D);
+  // 채워진 상태면 fill/strike에 color 적용, 비어있으면 외곽선만 color
+  path.setAttribute("fill", filled ? color : "none");
+  path.setAttribute("stroke", filled ? color : color);
+  path.setAttribute("stroke-width", filled ? "0" : "1.3");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(path);
+  return svg;
+}
+
+  const svg  = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("viewBox","0 0 24 24");
+  svg.setAttribute("aria-hidden","true");
+  svg.style.display="block";
+  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+  path.setAttribute("d","M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1 4.22 2.44C11.09 5 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z");
   path.setAttribute("fill", filled ? color : "none");
   path.setAttribute("stroke", filled ? color : "#777");
   path.setAttribute("stroke-width", filled ? "0" : "1.5");
   svg.appendChild(path);
-  return svg;
-}
 
 function renderHeartButton(){
   const root = document.getElementById("heartButton");
