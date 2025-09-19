@@ -1889,6 +1889,7 @@
       countsById.set(String(item.id), counts);
       myById.set(String(item.id), my);
       uiUpdate(container, counts, my);
+      try { window.applyItemVoteCounts?.(counts); } catch {}
 
       if (!container.__bound) {
         container.__bound = true;
@@ -1912,7 +1913,7 @@
             countsById.set(id, counts);
             updateEverywhere(id, counts, null);
             bcNotifySelf("self:vote", { id, ns, choice: null, counts });
-
+            try { window.addLabelVoteDelta?.(lb, -1); } catch {}
 
             const res = await unvote(id, ns);
             if (res.counts) { countsById.set(id, res.counts); myById.set(id, res.my); updateEverywhere(id, res.counts, res.my); }
@@ -1923,6 +1924,10 @@
             countsById.set(id, counts);
             updateEverywhere(id, counts, lb);
             bcNotifySelf("self:vote", { id, ns, choice: lb, counts });
+            try {
+              if (prevMy) window.addLabelVoteDelta?.(prevMy, -1);
+              window.addLabelVoteDelta?.(lb, +1);
+            } catch {}
 
             const res = await castVote(id, lb, ns);
             if (res.counts) { countsById.set(id, res.counts); myById.set(id, res.my); updateEverywhere(id, res.counts, res.my); }
@@ -1930,6 +1935,10 @@
               const back = await fetchVotes(id, ns);
               countsById.set(id, back.counts); myById.set(id, back.my);
               updateEverywhere(id, back.counts, back.my);
+            try {
+              const fixed = (res && res.counts) ? res.counts : null;
+              if (fixed) window.setLabelVotesMap?.(fixed); // 서버 스냅샷으로 덮어쓰기
+            } catch {}
             }
           }
 

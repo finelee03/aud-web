@@ -63,6 +63,7 @@ async function __flushSnapshot(opts = { server: true }){
     __forceLsSet(HEARTS_SYNC_KEY, { map: loadHearts() });
     __forceLsSet(TS_SYNC_KEY,     { map: loadTimestamps() });
     __forceLsSet(LIKES_SYNC_KEY,  { map: loadLikes() });
+    __forceLsSet(LABEL_VOTES_SYNC_KEY, { map: loadLabelVotes() });
     // 2) 서버에도 푸시(옵션)
     if (opts.server) await __pushStateKeepalive();
   } catch {}
@@ -79,18 +80,56 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("pagehide", () => { __flushSnapshot({ server: true }); }, { capture: true });
 window.addEventListener("beforeunload", () => { __flushSnapshot({ server: true }); }, { capture: true });
 
-// PATCH: add near other small helpers
+// PATCH: helpers (public)
 function readHeartsMap(){ return loadHearts(); }
-// 내가 '받은' 하트 집계(라벨별) 읽기 — mine.js가 계산/캐시해 둔 값을 사용
-function readReceivedHeartsMap(){
-  try {
-    const ns = (typeof getUserNS === 'function' ? getUserNS() : 'default');
-    const raw = sessionStorage.getItem(`receivedHearts:${ns}`);
-    const obj = raw ? JSON.parse(raw) : null;
-    return (obj && obj.perLabel) ? obj.perLabel : null; // { thump: n, miro: n, ... }
-  } catch { return null; }
+// ★ 라벨별 투표 총합(SSOT)
+function loadLabelVotes(){
+  try { const raw = localStorage.getItem(LABEL_VOTES_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; }
 }
-window.readReceivedHeartsMap = readReceivedHeartsMap;
+function saveLabelVotes(map){
+  try { localStorage.setItem(LABEL_VOTES_KEY, JSON.stringify(map||{})); } catch {}
+  // 탭 간 동기화 방송
+  try { localStorage.setItem(LABEL_VOTES_SYNC_KEY, JSON.stringify({ map, t: Date.now() })); } catch {}
+  try { window.dispatchEvent(new CustomEvent("label:votes-changed", { detail: { map } })); } catch {}
+}
+function readLabelVotes(){ return loadLabelVotes(); }
+
+/* ── Label Votes SSOT API ───────────────────────────────────────────── */
+const ALL_LABELS_SET = new Set(ALL_LABELS);
+function zeroLabelMap(){ const m = {}; for (const k of ALL_LABELS) m[k] = 0; return m; }
+
+// counts: {thump:number,...} (아이템 단위의 투표 카운트 "스냅샷"을 SSOT 총합에 누산)
+function applyItemVoteCounts(counts){
+  if (!counts || typeof counts !== 'object') return;
+  const base = { ...zeroLabelMap(), ...loadLabelVotes() };
+  for (const k of Object.keys(counts)) {
+    if (!ALL_LABELS_SET.has(k)) continue;
+    const n = Number(counts[k] || 0);
+    base[k] = Math.max(0, Number(base[k] || 0) + n); // 누산(집계 정책: 총합)
+  }
+  saveLabelVotes(base);
+}
+
+// 델타 적용: 특정 라벨에 +1/-1
+function addLabelVoteDelta(label, delta){
+  if (!ALL_LABELS_SET.has(label)) return;
+  const m = { ...zeroLabelMap(), ...loadLabelVotes() };
+  m[label] = Math.max(0, Number(m[label] || 0) + Number(delta || 0));
+  saveLabelVotes(m);
+}
+
+// 전면 교체(서버 권위치로 덮어쓰기)
+function setLabelVotesMap(nextMap){
+  const m = { ...zeroLabelMap(), ...(nextMap || {}) };
+  for (const k of Object.keys(m)) if (!ALL_LABELS_SET.has(k)) delete m[k];
+  saveLabelVotes(m);
+}
+
+// 전역 공개
+window.applyItemVoteCounts = applyItemVoteCounts;
+window.addLabelVoteDelta   = addLabelVoteDelta;
+window.setLabelVotesMap    = setLabelVotesMap;
+window.readLabelVotes = readLabelVotes;
 
 
 /* ────────────────────────────────────────────────────────────
@@ -106,9 +145,9 @@ let JIB_COLLECTED_EVT  = "jib:collection-changed";
 let LABEL_SELECTED_EVT   = "label:selected-changed";
 let LABEL_COLLECTED_EVT  = "label:collected-changed";
 
-let LABEL_SYNC_KEY, JIB_SYNC_KEY, HEARTS_SYNC_KEY, TS_SYNC_KEY, LIKES_SYNC_KEY;
+let LABEL_SYNC_KEY, JIB_SYNC_KEY, HEARTS_SYNC_KEY, TS_SYNC_KEY, LIKES_SYNC_KEY, LABEL_VOTES_SYNC_KEY;
 let STATE_UPDATED_AT_LS;
-let LABEL_COLLECTED_KEY, LABEL_TEMP_KEY, TIMESTAMPS_KEY, HEARTS_KEY, LABEL_SELECTED_KEY, LIKES_KEY;
+let LABEL_COLLECTED_KEY, LABEL_TEMP_KEY, TIMESTAMPS_KEY, HEARTS_KEY, LABEL_SELECTED_KEY, LIKES_KEY, LABEL_VOTES_KEY;
 let SESSION_INIT_KEY;
 let JIB_SELECTED_KEY, JIB_COLLECTED_KEY;
 
@@ -118,12 +157,14 @@ function recalcKeys(){
   HEARTS_SYNC_KEY      = nsKey("label:hearts-sync");
   TS_SYNC_KEY          = nsKey("label:ts-sync");
   LIKES_SYNC_KEY       = nsKey("itemLikes:sync"); 
+  LABEL_VOTES_SYNC_KEY = nsKey("labelVotes:sync");
   STATE_UPDATED_AT_LS  = nsKey("state:updatedAt");
   LABEL_COLLECTED_KEY  = nsKey("collectedLabels");
   LABEL_TEMP_KEY       = nsKey("tempCollectedLabels");
   TIMESTAMPS_KEY       = nsKey("labelTimestamps");
   HEARTS_KEY           = nsKey("labelHearts");
   LIKES_KEY            = nsKey("itemLikes");  
+  LABEL_VOTES_KEY      = nsKey("labelVotes");
   LABEL_SELECTED_KEY   = nsKey("aud:selectedLabel");
   SESSION_INIT_KEY     = nsKey("sdf-session-init-v1");
   JIB_SELECTED_KEY     = nsKey("jib:selected");
@@ -134,6 +175,7 @@ recalcKeys();
 window.LABEL_SYNC_KEY = LABEL_SYNC_KEY;  // e.g., "label:sync:<ns>"
 window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
 window.LIKES_SYNC_KEY = LIKES_SYNC_KEY;
+window.LABEL_VOTES_SYNC_KEY = LABEL_VOTES_SYNC_KEY;
 
 /* ── 로그인/로그아웃 등 Auth 상태 변경 감지: NS 재계산 + 필요 시 세션→로컬 이관 ───────── */
 (function installAuthNSWatcher(){
@@ -446,6 +488,11 @@ function applyIncoming(kindKey, payload){
       window.dispatchEvent(new Event("label:timestamps-changed"));
       return;
     }
+    if (kindKey === LABEL_VOTES_SYNC_KEY && payload?.map){
+      // SSOT에 즉시 반영(+ 탭 방송 + 이벤트 발생)
+      saveLabelVotes(payload.map);
+      return;
+    }
     if (kindKey === LABEL_SYNC_KEY){
       if (payload?.type === "select") {
         if (payload.label && isLabel(payload.label)) {
@@ -484,7 +531,7 @@ window.addEventListener("storage", (e)=>{
   // 로그인(=persistEnabled) 상태면: 지속 스냅샷 키들 수신
   if (persistEnabled()) {
     const k = e?.key;
-    if (!k || (k !== HEARTS_SYNC_KEY && k !== TS_SYNC_KEY && k !== LABEL_SYNC_KEY && k !== JIB_SYNC_KEY)) return;
+    if (!k || (k !== HEARTS_SYNC_KEY && k !== TS_SYNC_KEY && k !== LABEL_SYNC_KEY && k !== JIB_SYNC_KEY && k !== LABEL_VOTES_SYNC_KEY)) return;
     try {
       const payload = JSON.parse(e.newValue || "null");
       applyIncoming(k, payload);
@@ -505,7 +552,7 @@ window.addEventListener("storage", (e)=>{
 /** Guest: BroadcastChannel 수신 */
 onGuest((m)=>{
   const k = m?.kind;
-  if (k === HEARTS_SYNC_KEY || k === TS_SYNC_KEY || k === LABEL_SYNC_KEY || k === JIB_SYNC_KEY){
+  if (k === HEARTS_SYNC_KEY || k === TS_SYNC_KEY || k === LABEL_SYNC_KEY || k === JIB_SYNC_KEY || k === LABEL_VOTES_SYNC_KEY){
     applyIncoming(k, m.payload);
   }
 });
@@ -548,6 +595,7 @@ async function pushStateToServer() {
     timestamps: loadTimestamps(),
     hearts: loadHearts(),
     likes: loadLikes(), 
+    labelVotes: loadLabelVotes(),
     jibs: {
       selected: readJibSelected(),
       collected: [...readJibCollectedSet()],
@@ -1109,6 +1157,16 @@ labels.getHearts = function getHearts() { return { ...loadHearts() }; };
         window.dispatchEvent(new Event("label:timestamps-changed"));
       }
     }
+
+    const lastVotes = persistEnabled() ? lsGet(LABEL_VOTES_SYNC_KEY) : null;
+    if (lastVotes){
+      const { map } = safeParse(lastVotes, {});
+      if (map && typeof map === "object"){
+        // SSOT에 기록 + 이벤트/브로드캐스트 (저장소 키는 NS별로 이미 설정됨)
+        saveLabelVotes(map);
+      }
+    }
+
   }catch{}
 
   // 2) 서버에서 최신 상태 1회 당겨오기
@@ -1170,6 +1228,16 @@ function rehydrateFromSnapshots(){
         window.dispatchEvent(new Event("label:timestamps-changed"));
       }
     }
+
+    const lastVotes = persistEnabled() ? lsGet(LABEL_VOTES_SYNC_KEY) : null;
+    if (lastVotes){
+      const { map } = safeParse(lastVotes, {});
+      if (map && typeof map === "object"){
+        // SSOT에 기록 + 이벤트/브로드캐스트 (저장소 키는 NS별로 이미 설정됨)
+        saveLabelVotes(map);
+      }
+    }
+
   }catch{}
 }
 
