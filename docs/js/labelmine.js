@@ -1751,9 +1751,7 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       u?.handle ?? u?.username ?? u?.login ?? u?.profile?.handle ?? "";
     const avatar =
       u?.avatar_url ?? u?.avatar ?? u?.picture ?? u?.profile?.avatarUrl ?? "";
-    const ns =
-      (window.SDF_NS ||
-       (localStorage.getItem("auth:userns") || "default")).trim().toLowerCase();
+    const ns = getNS();
     return { id: id && String(id), ns, name: String(name||""), handle: String(handle||""), avatar: String(avatar||"") };
   }
 
@@ -1829,7 +1827,7 @@ function goMineAfterShare(label = getLabel()) {
       window.setSelectedLabel(label);
     }
   } catch {}
-  const url = `${pageHref('mine.html')}?label=${encodeURIComponent(label)}&posted=1`;
+  const url = pageHref("/mine.html")+ "?label=${encodeURIComponent(label)}&posted=1";
   // 뒤로가기로 작성 화면 복귀를 허용하려면 assign, 히스토리 덮으려면 replace
   location.assign(url);
 }
@@ -1887,6 +1885,8 @@ function goMineAfterShare(label = getLabel()) {
     const csrf  = await ensureCSRF();
     const id    = `g_${now()}`;
 
+    let safePad = Math.max(0, Math.min(0.45, Number(pad) || 0));
+
     // 🔴 업로드용 블랍을 표준화
     try {
       // blob → Image → temp canvas
@@ -1897,12 +1897,7 @@ function goMineAfterShare(label = getLabel()) {
 
       // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
       const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
-      const safePad = Math.max(0, Math.min(0.45, Number(pad) || 0)); // 0%~45%
-      const norm = SDF.Utils.trimAndPadToSquare(c, {
-        padding: safePad,
-        size: target,
-        bg    : typeof bg === "string" && bg ? bg : null, // 여백 색 = 배경색
-      });
+      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: safePad, size: target });
 
       // 캔버스 → Blob
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
@@ -1925,6 +1920,7 @@ function goMineAfterShare(label = getLabel()) {
     if (width)  fd.append("width",  String(width));
     if (height) fd.append("height", String(height));
     if (csrf)   fd.append("_csrf",  csrf);
+    fd.append("pad", String(safePad));
 
     // ✨ 추가: 캡션/배경색
     const clean = String(text || "").trim();
@@ -2319,35 +2315,24 @@ function goMineAfterShare(label = getLabel()) {
       const picker = buildColorPicker({ onChange: (hex) => applyBg(hex) });
       applyBg('#FFFFFF');
 
-      // ▶ 여백 슬라이더 UI
-      const marginGroup = document.createElement("div");
-      marginGroup.className = "im-group";
-      marginGroup.textContent = "Margin";
+      // 패딩 슬라이더 (0~45%, 기본 8%)
+      let padPct = 8;
+      const padGroup = document.createElement("div");
+      padGroup.className = "im-group";
+      padGroup.textContent = "Padding";
+      const padRow = document.createElement("div");
+      padRow.className = "im-row-range";
+      const padInput = document.createElement("input");
+      padInput.type = "range"; padInput.min = "0"; padInput.max = "45"; padInput.step = "1"; padInput.value = String(padPct);
+      padInput.className = "im-pad";
+      const padVal = document.createElement("span");
+      padVal.className = "im-pad-val";
+      padVal.textContent = padPct + "%";
+      padInput.addEventListener("input", () => { padPct = +padInput.value; padVal.textContent = padPct + "%"; });
+      padRow.append(padInput, padVal);
+      padGroup.append(padRow);
 
-      const marginRow = document.createElement("div");
-      marginRow.className = "im-row";
-      const margin = document.createElement("input");
-      margin.type = "range"; margin.min = "0"; margin.max = "45"; margin.step = "1"; margin.value = "8";
-      margin.className = "im-margin";
-      const marginVal = document.createElement("span");
-      marginVal.className = "im-kv";
-      marginVal.textContent = "8%";
-      marginRow.append(margin, marginVal);
-      marginGroup.append(marginRow);
-
-      function applyMarginPX() {
-        const pct = Number(margin.value) / 100;
-        const side = Math.min(stage.clientWidth, stage.clientHeight);
-        const padPx = Math.round(side * pct);
-        stage.style.padding = padPx + "px"; // 미리보기용
-        marginVal.textContent = `${margin.value}%`;
-      }
-      margin.addEventListener("input", applyMarginPX);
-      window.addEventListener("resize", applyMarginPX);
-      // 이미지 로드 후 초기 적용
-      stageImg.addEventListener("load", applyMarginPX, { once: true });
-
-      right.append(acct, caption, meta, picker.el, marginGroup);
+      right.append(acct, caption, meta, picker.el, padGroup);
       body.append(left, right);
       shell.append(head, body);
       back.append(shell);
@@ -2382,14 +2367,7 @@ function goMineAfterShare(label = getLabel()) {
         share.textContent = "Sharing…";
         try {
           if (!await requireLoginOrRedirect()) return;
-        await uploadPost({
-          blob,
-          text: caption.value,
-          width: w,
-          height: h,
-          bg: bgHex,
-          pad: Number(margin.value) / 100
-        });
+          await uploadPost({ blob, text: caption.value, width: w, height: h, bg: bgHex, pad: padPct/100 });
           // ✅ 업로드 성공 → mine으로 이동
           goMineAfterShare();
           return; // 네비게이션 트리거 이후 아래 코드는 사실상 실행되지 않음
@@ -2456,39 +2434,25 @@ function goMineAfterShare(label = getLabel()) {
     const applyBg = (c) => { left.style.background = c; stage.style.background = c; bgHex = c; };
     const picker  = buildColorPicker({ onChange: (hex)=> applyBg(hex) });
     applyBg('#FFFFFF');
-    
-    // ▶ 여백 슬라이더 UI
-    const marginGroup = document.createElement("div");
-    marginGroup.className = "im-group";
-    marginGroup.textContent = "Margin";
 
-    const marginRow = document.createElement("div");
-    marginRow.className = "im-row";
-    const margin = document.createElement("input");
-    margin.type = "range"; margin.min = "0"; margin.max = "45"; margin.step = "1"; margin.value = "8";
-    margin.className = "im-margin";
-    const marginVal = document.createElement("span");
-    marginVal.className = "im-kv";
-    marginVal.textContent = "8%";
-    marginRow.append(margin, marginVal);
-    marginGroup.append(marginRow);
+    // 패딩 슬라이더 (0~45%, 기본 8%)
+    let padPct = 8;
+    const padGroup = document.createElement("div");
+    padGroup.className = "im-group";
+    padGroup.textContent = "Padding";
+    const padRow = document.createElement("div");
+    padRow.className = "im-row-range";
+    const padInput = document.createElement("input");
+    padInput.type = "range"; padInput.min = "0"; padInput.max = "45"; padInput.step = "1"; padInput.value = String(padPct);
+    padInput.className = "im-pad";
+    const padVal = document.createElement("span");
+    padVal.className = "im-pad-val";
+    padVal.textContent = padPct + "%";
+    padInput.addEventListener("input", ()=>{ padPct = +padInput.value; padVal.textContent = padPct + "%"; });
+    padRow.append(padInput, padVal);
+    padGroup.append(padRow);
 
-    function applyMarginPX() {
-      const pct = Number(margin.value) / 100;
-      const side = Math.min(stage.clientWidth, stage.clientHeight);
-      const padPx = Math.round(side * pct);
-     stage.style.padding = padPx + "px"; // 미리보기용
-      marginVal.textContent = `${margin.value}%`;
-    }
-    margin.addEventListener("input", applyMarginPX);
-    window.addEventListener("resize", applyMarginPX);
-    // 이미지 로드 후 초기 적용
-    stageImg.addEventListener("load", applyMarginPX, { once: true });
-
-    right.append(acct, caption, meta, picker.el, marginGroup);
-
-     stageImg.addEventListener("load", applyMarginPX);
-
+    right.append(acct, caption, meta, attach, picker.el, padGroup);
 
     // 글로벌 닫기
     const globalClose = document.createElement("button");
@@ -2555,14 +2519,14 @@ function goMineAfterShare(label = getLabel()) {
       share.textContent = "Sharing…";
       try {
         if (!await requireLoginOrRedirect()) return;
-      await uploadPost({
-        blob: state.blob,
-        text: caption.value,
-        width: state.w,
-        height: state.h,
-        bg: bgHex,
-        pad: Number(margin.value) / 100
-      });
+        await uploadPost({
+          blob: state.blob,
+          text: caption.value,
+          width: state.w,
+          height: state.h,
+          bg: bgHex,
+          pad: padPct/100
+        });
         // ✅ 업로드 성공 → mine으로 이동
         goMineAfterShare();
         return;
