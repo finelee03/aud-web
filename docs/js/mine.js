@@ -10,7 +10,11 @@
   try {
     window.CSS = window.CSS || {};
     if (typeof window.CSS.escape !== "function") {
-      window.CSS.escape = (v) => String(v).replace(/["\\]/g, "\\$&");
+      window.CSS.escape = (v) =>
+        String(v).replace(/[^a-zA-Z0-9_\u00A0-\uFFFF-]/g, ch => {
+          const cp = ch.codePointAt(0).toString(16).toUpperCase();
+          return "\\" + cp + " ";
+        });
     }
   } catch {}
 
@@ -301,24 +305,35 @@
   }
 
   // 안전하게 좋아요 카운트를 그리드/모달에 반영 (값 있을 때만)
-  function __writeLikeCountInto(cardOrRoot, likes) {
-    if (typeof likes !== "number" || Number.isNaN(likes)) return; // 값 없으면 건드리지 않음
-    const root = (cardOrRoot instanceof Element) ? cardOrRoot : document;
+  // === COUNT: store만을 단일 소스로 사용 ===
+  function renderCountFromStore(id, root = document) {
+    try {
+      if (typeof window.readLikesMap !== 'function') return;
+      const map = window.readLikesMap() || {};
+      const rec = map[String(id)] || {};
+      if (typeof rec.c !== 'number') return;
 
-    const n = Math.max(0, likes);
-    const cnt = root.querySelector?.('[data-like-count]');
-    if (cnt) {
-      cnt.dataset.count = String(n);
-      try { cnt.textContent = (typeof fmtCount === 'function' ? fmtCount(n) : String(n)); } catch { cnt.textContent = String(n); }
-    }
-    const line = root.querySelector?.('.likes-line');
-    if (line) {
-      try {
-        line.innerHTML = `<span class="likes-count">${(typeof fmtInt==='function'? fmtInt(n) : String(n))}</span> ${(typeof likeWordOf==='function'? likeWordOf(n) : (n<=1?'like':'likes'))}`;
-      } catch {
-        line.textContent = `${n} ${n<=1?'like':'likes'}`;
+      const n = Math.max(0, rec.c);
+      const card = (root instanceof Element) ? root : document;
+
+      // 그리드(hover-ui) 카운트
+      const cnt = card.querySelector?.('[data-like-count]');
+      if (cnt) {
+        cnt.dataset.count = String(n);
+        try { cnt.textContent = (typeof fmtCount === 'function' ? fmtCount(n) : String(n)); }
+        catch { cnt.textContent = String(n); }
       }
-    }
+
+      // 모달 하단 라인
+      const line = card.querySelector?.('.likes-line');
+      if (line) {
+        try {
+          line.innerHTML = `<span class="likes-count">${(typeof fmtInt==='function'? fmtInt(n) : String(n))}</span> ${(typeof likeWordOf==='function'? likeWordOf(n) : (n<=1?'like':'likes'))}`;
+        } catch {
+          line.textContent = `${n} ${n<=1?'like':'likes'}`;
+        }
+      }
+    } catch {}
   }
 
   // (선택) 다른 스크립트에서도 쓸 수 있게 노출
@@ -331,7 +346,7 @@
   function createMedia(src, speed = 1, opts = { lazy: true }) {
     if (!src) return document.createComment("no-media");
     const isVideo = /\.mp4(\?|$)/i.test(src);
-
+    const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     if (!isVideo) {
       const img = document.createElement("img");
       img.src = src;
@@ -344,14 +359,29 @@
 
     const mountVideo = () => {
       const v = document.createElement("video");
-      v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true;
-      v.preload = "metadata";
-      v.tabIndex = -1;
-      v.className = "media-fill";
-      v.src = src;
+      v.autoplay   = !reduceMotion;
+      v.muted      = true;
+      v.loop       = !reduceMotion;
+      v.playsInline= true;
+      v.preload    = "metadata";
+      v.tabIndex   = -1;
+      v.className  = "media-fill";
+      v.src        = src;
       v.style.pointerEvents = "none";
       v.addEventListener("loadedmetadata", () => { try { v.playbackRate = speed; } catch {} });
-      v.addEventListener("loadeddata", () => v.play().catch(()=>{}), { once: true });
+      if (!reduceMotion) v.addEventListener("loadeddata", () => v.play().catch(()=>{}), { once: true });
+
+      // 화면 밖으로 나가면 일시정지 / 들어오면 재생
+      if ("IntersectionObserver" in window) {
+        const io2 = new IntersectionObserver((ents) => {
+          const vis = ents.some(e => e.isIntersecting);
+          if (reduceMotion) { v.pause(); return; }
+          if (!vis) { try { v.pause(); } catch {} }
+          else { v.play().catch(()=>{}); }
+        }, { rootMargin: "100px", threshold: 0.01 });
+        // 비디오가 DOM에 붙은 뒤 관찰
+        queueMicrotask(() => io2.observe(v));
+      }
       return v;
     };
 
@@ -784,46 +814,6 @@
     idxById: new Map()
   };
 
-  /* === LIKE CACHE (persist across refresh; NS-scoped) ======================= */
-const LikeCache = (() => {
-  const KEY = (ns) => `like:state:${String(ns||'default').toLowerCase()}`;
-  const TTL = 7 * 24 * 60 * 60 * 1000; // 7일
-  const now = () => Date.now();
-
-  function read(ns){
-    try { return JSON.parse(localStorage.getItem(KEY(ns)) || "{}"); } catch { return {}; }
-  }
-  function write(ns, db){
-    try { localStorage.setItem(KEY(ns), JSON.stringify(db)); } catch {}
-  }
-  function get(ns, id){
-    const db = read(ns); const rec = db?.[id];
-    if (!rec) return null;
-    if (rec.t && (now() - rec.t) > TTL) return null;
-    return { liked: !!rec.l, likes: (typeof rec.c === "number" ? Math.max(0, rec.c) : null), t: rec.t || 0 };
-  }
-  function set(ns, id, liked, likes){
-    const db = read(ns);
-    db[id] = { l: !!liked, c: (typeof likes === "number" ? Math.max(0, likes) : (db[id]?.c ?? null)), t: now() };
-    write(ns, db);
-  }
-  // 서버 스냅샷 수신 시 병합: 최근(24h) 로컬 의도를 우선, 그 외는 서버 채택
-  function mergeServer(ns, id, liked, likes){
-    const cur = get(ns, id);
-    if (!cur) { if (liked != null || typeof likes === "number") set(ns, id, (liked ?? false), (typeof likes === "number" ? likes : null)); return; }
-    const fresh = 24 * 60 * 60 * 1000;
-    const changed = (liked != null && liked !== cur.liked) || (typeof likes === "number" && likes !== cur.likes);
-    if (!changed) return;
-    if (Date.now() - cur.t <= fresh) {
-      // 로컬이 더 신선 → 그대로 유지
-      return;
-    } else {
-      set(ns, id, (liked ?? cur.liked), (typeof likes === "number" ? likes : cur.likes));
-    }
-  }
-  return { get, set, mergeServer };
-})();
-
 
   // --- RANDOMIZE util (Fisher–Yates) ---
   function shuffleInPlace(arr){
@@ -834,9 +824,9 @@ const LikeCache = (() => {
     return arr;
   }
 
-  async function api(path, opt={}) {
+  async function api(path, opt = {}) {
     const fn = window.auth?.apiFetch || fetch;
-    return fn(path, opt);
+    return fn(toAPI(path), opt);
   }
 
   // === Like endpoint resolver (gallery 우선, 실패 시 items로 1회 폴백; 메서드 폴백은 POST {like}) ===
@@ -847,7 +837,8 @@ const LikeCache = (() => {
   const fmtDate = (ts) => {
     try {
       const d = new Date(Number(ts) || Date.now());
-      return d.toLocaleDateString(undefined, { year:"numeric", month:"short", day:"2-digit" });
+      const loc = (navigator && navigator.language) ? navigator.language : 'en-US';
+      return d.toLocaleDateString(loc, { year:"numeric", month:"short", day:"2-digit" });
     } catch { return ""; }
   };
 
@@ -871,7 +862,7 @@ const LikeCache = (() => {
     (window.requestAnimationFrame || setTimeout)(() => {
       cards.forEach((card) => {
         // 카운트는 '숫자일 때만' 갱신 (값 없으면 유지)
-        __writeLikeCountInto(card, likes);
+        renderCountFromStore(id, card);  
         if (typeof liked === 'boolean') {
           const btn = card.querySelector('.btn-like');
           if (btn) {
@@ -992,11 +983,10 @@ const LikeCache = (() => {
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-          LikeCache.mergeServer(viewerNS, id, liked, likes);
-          const pref = LikeCache.get(viewerNS, id);
-          const L = (pref && pref.liked != null) ? pref.liked : liked;
-          const C = (pref && typeof pref.likes === "number") ? pref.likes : likes;
-          applyUI(id, L, C); 
+        if (typeof likes === "number" && window.setLikeCountOnly) window.setLikeCountOnly(id, likes);
+        if (typeof liked === "boolean" && window.setLikeIntent) window.setLikeIntent(id, liked, likes);
+        const rec = window.getLikeIntent ? window.getLikeIntent(id) : { liked, likes };
+        applyUI(id, rec?.liked ?? liked, (typeof rec?.likes === "number" ? rec.likes : likes));
           return;
         }} catch {}
 
@@ -1006,11 +996,10 @@ const LikeCache = (() => {
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-          LikeCache.mergeServer(viewerNS, id, liked, likes); // [ADD]
-          const pref = LikeCache.get(viewerNS, id);
-          const L = (pref && pref.liked != null) ? pref.liked : liked;
-          const C = (pref && typeof pref.likes === "number") ? pref.likes : likes;
-          applyUI(id, L, C); 
+        if (typeof likes === "number" && window.setLikeCountOnly) window.setLikeCountOnly(id, likes);
+        if (typeof liked === "boolean" && window.setLikeIntent) window.setLikeIntent(id, liked, likes);
+        const rec = window.getLikeIntent ? window.getLikeIntent(id) : { liked, likes };
+        applyUI(id, rec?.liked ?? liked, (typeof rec?.likes === "number" ? rec.likes : likes));
           return;
         }} catch {}
     });
@@ -1054,14 +1043,12 @@ const LikeCache = (() => {
       try { upgradeHeartIconIn(card); } catch {}
 
       frag.appendChild(card);
+      try { renderCountFromStore(id, card); } catch {}
             // [ADD] 캐시 우선: 페이지가 새로 뜨거나 돌아왔을 때도 사용자의 like 상태/카운트 유지
       try {
         const viewerNS = (window.getNS ? getNS() : "default");
-        const rec = LikeCache.get(viewerNS, id);
-        if (rec) {
-          // FEED 메모리 + UI 모두 갱신
-          commit(id, rec.liked, (typeof rec.likes === "number" ? rec.likes : it.likes));
-        }
+        const rec = (typeof window.getLikeIntent === "function") ? window.getLikeIntent(id) : null;
+        if (rec) commit(id, rec.liked, (typeof rec.likes === "number" ? rec.likes : it.likes));
       } catch {}
 
       FEED.idxById.set(id, FEED.items.length);
@@ -1134,10 +1121,7 @@ const LikeCache = (() => {
   const api = (p,o)=> (window.auth?.apiFetch ? window.auth.apiFetch(p,o) : fetch(p,o));
   const withCSRF = window.withCSRF || (async (opt)=>opt);
 
-  function getNS(){
-    try { return (localStorage.getItem('auth:userns') || 'default').trim().toLowerCase(); }
-    catch { return 'default'; }
-  }
+  const getNS = (window.getNS ? window.getNS : ()=>'default');
 
   // 🔗 상단 전역 setHeartVisual만 호출 (없으면 안전 폴백)
   const hv = (target, pressed) => {
@@ -1244,7 +1228,7 @@ const LikeCache = (() => {
       } else {
         document
           .querySelectorAll(`.feed-card[data-id="${CSS.escape(String(id))}"]`)
-          .forEach(card => { __writeLikeCountInto(card, st.likes); writeInto(card, st.liked, st.likes); });
+          .forEach(card => { writeInto(card, st.liked, st.likes); });
       }
     };
     (window.requestAnimationFrame || setTimeout)(run);
@@ -1280,12 +1264,15 @@ const LikeCache = (() => {
         : prevLiked;
       const nextLikes = (typeof likes === 'number') ? likes : (STATE.get(id)?.likes ?? null);
       commit(id, nextLiked, nextLikes);
-
+      // 캐시/스토어에도 최신 count 반영
+      if (typeof likes === 'number') { try { window.setLikeCountOnly?.(id, likes); } catch {} }
+      // liked 플래그를 서버가 명시한 경우 의도 캐시 동기화
+      if (liked != null) { try { window.setLikeIntent?.(id, liked, (typeof likes==='number'? likes : undefined)); } catch {} }
       if (typeof likes !== 'number') {
         throttleFetchLikes(id, ns);
       }
 
-      try { if (isMineEvent) LikeCache?.set?.(viewerNS(), id, nextLiked, nextLikes); } catch {}
+      try { window.setLikeIntent?.(id, nextLiked, nextLikes); } catch {}
     } catch {}
   };
 
@@ -1307,28 +1294,27 @@ const LikeCache = (() => {
     try { btn?.setAttribute('aria-busy','true'); if (btn) btn.disabled = true; } catch {}
 
     // ① 낙관적 커밋
-    const optimisticLikes = Math.max(0, Number(prev.likes||0) + (wantLike ? 1 : -1));
-    commit(id, wantLike, optimisticLikes);
+    const prevLikes = Number(readFromDOM(card).likes || 0);
+    const nextLikes = (prev.liked === wantLike) ? prevLikes : Math.max(0, prevLikes + (wantLike ? +1 : -1));
+    commit(id, wantLike, nextLikes);
+    if (window.setLikeIntent) window.setLikeIntent(id, wantLike, nextLikes);
     LAST.set(id, Date.now());
-    LikeCache.set(viewerNS(), id, wantLike, optimisticLikes);
-    bcNotifySelf("self:like", { id, ns, liked: wantLike, likes: optimisticLikes });
+    bcNotifySelf("self:like", { id, ns, liked: wantLike, likes: nextLikes });
 
     // ② 서버 동기화 (+ 모순 스냅샷 무시)
     try{
       const r = await callLikeAPI(id, ns, wantLike);
       const ttl = 1200; // ms
       const age = Date.now() - (LAST.get(id) || 0);
-
-      if (r && (r.liked != null || typeof r.likes === 'number')){
-        const nextLiked = (r.liked != null) ? r.liked : wantLike;
-        const nextLikes = (typeof r.likes === 'number') ? r.likes : optimisticLikes;
-        if (age > ttl || nextLiked === wantLike) { commit(id, nextLiked, nextLikes); LikeCache.set(viewerNS(), id, nextLiked, nextLikes); }
-      } else {
-        const s = await fetchSnapshot(id, ns);
-        if (s && (s.liked != null || typeof s.likes === 'number')){
-          const nextLiked = (s.liked != null) ? s.liked : wantLike;
-          const nextLikes = (typeof s.likes === 'number') ? s.likes : optimisticLikes;
-          if (Date.now() - (LAST.get(id)||0) > 1200 || nextLiked === wantLike) { commit(id, nextLiked, nextLikes); LikeCache.set(viewerNS(), id, nextLiked, nextLikes); }
+      if (r) {
+        if (typeof r.likes === "number") {
+          commit(id, /*liked*/ null, r.likes);
+          if (window.setLikeCountOnly) window.setLikeCountOnly(id, r.likes);
+        }
+        if (typeof r.liked === "boolean") {
+          // 의도도 서버가 돌려주면 동기화(최신 의도와 동일할 가능성이 높음)
+          commit(id, r.liked, /*likes*/ null);
+          if (window.setLikeIntent) window.setLikeIntent(id, r.liked);
         }
       }
     } finally {
@@ -1349,7 +1335,7 @@ const LikeCache = (() => {
           // liked는 내 계정 상태와 분리되므로 덮어쓰지 않고, '개수'만 권위값으로 반영
           commit(id, /*liked*/ null, /*likes*/ snap.likes);
           // 로컬 캐시도 개수만 갱신(계정 분리 유지)
-          try { LikeCache?.set?.(viewerNS(), id, (STATE.get(id)?.liked ?? null), snap.likes); } catch {}
+          try { window.setLikeCountOnly?.(id, snap.likes); } catch {}
         }
       } catch {}
     }, 250);
@@ -2043,17 +2029,7 @@ const LikeCache = (() => {
 
     __sock.on("item:like", (p) => {
       try { window.applyItemLikeEvent?.(p); } catch {}
-      try {
-        const id   = String(p?.id || p?.itemId || "");
-        const likes= (typeof p?.likes === "number" ? p.likes : (p?.data?.likes ?? p?.item?.likes));
-        const actor= p?.by ?? p?.user_id ?? p?.uid ?? p?.userId ?? p?.actor ?? p?.user?.id ?? null;
-        const myId = (typeof getMeId === "function" && getMeId()) || (window.__ME_ID || null);
-        const isMineEvent = (actor != null) && (String(actor) === String(myId));
-        if (id && !isMineEvent && typeof likes === "number") {
-          // 의도(l)는 보존, 카운트(c)만 반영 → 모든 페이지 동일 숫자
-          window.setLikeCountOnly?.(id, likes);
-        }
-      } catch {}
+      try { const id = String(p?.id || p?.itemId || ""); if (id) renderCountFromStore(id); } catch {}
       try { __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type: "item:like", data: p } }); } catch {}
     });
 
@@ -2103,6 +2079,17 @@ const LikeCache = (() => {
     if (!ids.length || !__sock) return;
     __sock.emit("unsubscribe", { items: ids });
   }
+
+  window.addEventListener('beforeunload', () => {
+    try { if (__io) { __io.disconnect(); __io = null; } } catch {}
+    try { if (__sock && typeof __sock.close === 'function') { __sock.close(); } } catch {}
+    try {
+      if (observeAvatars.__obs && typeof observeAvatars.__obs.disconnect === 'function') {
+        observeAvatars.__obs.disconnect();
+        observeAvatars.__obs = null;
+      }
+    } catch {}
+  });
 
 
   /* =========================================================
@@ -2185,22 +2172,8 @@ const LikeCache = (() => {
     function applyMap(map){
       if (!map) return;
       for (const [id, rec] of Object.entries(map)){
-        const liked = (typeof rec?.l === "boolean") ? rec.l : null;
         const likes = (typeof rec?.c === "number")  ? rec.c : null;
-        if (liked !== null || likes !== null) {
-          // UI 전체 동기화
-          try { updateLikeUIEverywhere(id, liked, likes); } catch {}
-          // 낙관 캐시도 보강(새로 연 모달/그리드 초기값 일치)
-          try { LikeCache?.set?.(viewerNS(), String(id), liked ?? undefined, likes ?? undefined); } catch {}
-          // FEED 메모리에도 반영
-          try {
-            const idx = FEED.idxById.get(String(id));
-            if (typeof idx === "number" && FEED.items[idx]) {
-              if (liked !== null) FEED.items[idx].liked = liked;
-              if (likes !== null) FEED.items[idx].likes = likes;
-            }
-          } catch {}
-        }
+        if (likes !== null) { try { renderCountFromStore(id); } catch {} }
       }
     }
 
@@ -2351,6 +2324,17 @@ const LikeCache = (() => {
 
   });
 
+  (function ensureA11y(){
+    const root = document;
+    const set = (scope=root) => {
+      scope.querySelectorAll('.likes-line:not([aria-live])').forEach(el => {
+        el.setAttribute('aria-live','polite');
+      });
+    };
+    set(); // 최초 1회
+    try { window.__hookA11yLikes = set; } catch {}
+  })();
+
   /* =========================================================
    * 11) POST MODAL (카드 크게 보기)
    * ========================================================= */
@@ -2377,6 +2361,26 @@ const LikeCache = (() => {
 
     let modal, sheet, content, btnClose, btnPrev, btnNext;
     let currentIndex = -1;
+    let prevFocus = null;
+    let untrapFocus = null;
+
+    function trapFocus(scope){
+      function onKey(e){
+        if (e.key !== 'Tab') return;
+        const focusables = Array.from(
+          scope.querySelectorAll('a,button,input,select,textarea,[tabindex]')
+        ).filter(el => !el.disabled && el.tabIndex !== -1 && el.offsetParent !== null);
+        if (!focusables.length) return;
+
+        const first = focusables[0];
+        const last  = focusables[focusables.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+      scope.addEventListener('keydown', onKey);
+      return () => scope.removeEventListener('keydown', onKey);
+    }
 
     function inject(){
       if ($("#post-modal")) return;
@@ -2470,7 +2474,8 @@ const LikeCache = (() => {
         head.insertBefore(btnDel, btnClose || null);
 
         // 클릭 → 확인 → 낙관적 제거 → 서버 삭제 → 브로드캐스트
-        btnDel.addEventListener('click', async () => {
+        if (!btnDel.__bound) btnDel.addEventListener('click', async () => {
+          btnDel.__bound = true;
           const id = String(item.id);
           const ns = nsOf(item);
           const ok = confirm('이 게시물을 삭제할까요? 이 작업은 되돌릴 수 없습니다.');
@@ -2633,19 +2638,20 @@ const LikeCache = (() => {
         }
       } catch {}
 
-      // 2) LikeCache(영속)로 보정
+      // 2) LikeIntent 캐시(영속)에 의한 보정
       try {
-        const rec = (typeof LikeCache?.get === "function") ? LikeCache.get(viewerNS(), String(it.id)) : null;
+        const rec = (typeof window.getLikeIntent === "function") ? window.getLikeIntent(String(it.id)) : null;
         if (rec) {
-          it.liked = rec.liked;
-          if (typeof rec.likes === "number") it.likes = rec.likes;
+          if (typeof rec.liked === "boolean") it.liked = rec.liked;
+          if (typeof rec.likes === "number")  it.likes = rec.likes;
         }
       } catch {}
       
       currentIndex = idx;
 
       content.innerHTML = `<div class="pm-card">${modalSplitHTML(it)}</div>`;
-
+      try { renderCountFromStore(it.id, content); } catch {}
+      try { window.__hookA11yLikes?.(content); } catch {}
       try { BG.apply([it]); } catch {}
       const hex = pickBgHex(it);
       if (hex) {
@@ -2656,6 +2662,7 @@ const LikeCache = (() => {
       }
 
       const art = content.querySelector(".feed-card");
+      try { window.__hookA11yLikes?.(art); } catch {}
 
       try { upgradeHeartIconIn(art); Avatar.install(art); } catch {}
       // 내 글이면 캐시로 강제 동기화(이름/아바타/데이터-id)
@@ -2728,8 +2735,11 @@ const LikeCache = (() => {
       const it = FEED.items[idx];
       if (it?.id) subscribeItems([String(it.id)]);
       renderAt(idx);
+      prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       modal.hidden = false;
       document.documentElement.style.overflow = "hidden";
+      untrapFocus?.(); // 안전 해제
+      untrapFocus = trapFocus(sheet);
       setTimeout(() => sheet.focus?.(), 0);
     }
 
@@ -2743,27 +2753,46 @@ const LikeCache = (() => {
         if (art) {
           const id = String(art.getAttribute('data-id') || '');
           if (id) {
-            const ns = art.getAttribute('data-ns') || (typeof getNS === 'function' ? getNS() : 'default');
+            // (참고) ns는 여기서 직사용하지 않음. store.js는 id 기준으로 저장/동기화.
             const btn = art.querySelector('.btn-like');
-            const liked = !!(btn && (btn.getAttribute('aria-pressed')==='true' || btn.classList.contains('is-liked')));
+            const liked =
+              !!(btn && (btn.getAttribute('aria-pressed') === 'true' || btn.classList.contains('is-liked')));
+
+            // 카운트 읽기: .likes-count(모달) 우선, 없으면 [data-like-count](그리드) 사용
             let likes = 0;
             const elCount = art.querySelector('.likes-count') || art.querySelector('[data-like-count]');
             if (elCount) {
               likes = elCount.classList?.contains?.('likes-count')
-                ? Number(String(elCount.textContent||'0').replace(/[^\d]/g,'')) || 0
+                ? Number(String(elCount.textContent || '0').replace(/[^\d]/g, '')) || 0
                 : Number(elCount.getAttribute('data-count') || elCount.dataset?.count || 0) || 0;
             }
-            try { setFeedMemoryLike(id, liked, likes); updateLikeUIEverywhere(id, liked, likes); } catch {}
-            try { LikeCache?.set?.(viewerNS(), id, liked, likes); } catch {}
+            // 음수 방지
+            likes = Math.max(0, likes);
+
+            // FEED 메모리 & UI 즉시 반영
+            try { setFeedMemoryLike(id, liked, likes); } catch {}
+            try { updateLikeUIEverywhere(id, liked, likes); } catch {}
+
+            // ★ 단일 소스: store.js에 스냅샷 기록 (LikeCache 제거)
+            // setLikeIntent(id, liked, likes) 가 있으면 의도/카운트를 함께 저장
+            try { window.setLikeIntent?.(id, liked, likes); } catch {}
           }
         }
       } catch {}
 
       // 2) 실제로 닫기
+      untrapFocus?.(); // 포커스 트랩 해제
+      untrapFocus = null;
+
       modal.hidden = true;
       document.documentElement.style.overflow = "";
       currentIndex = -1;
       content.innerHTML = "";
+
+      if (prevFocus && typeof prevFocus.focus === 'function') {
+        try { prevFocus.focus(); } catch {}
+      }
+      prevFocus = null;
     }
 
     window.openPostModalById = openById;
@@ -2810,6 +2839,7 @@ const LikeCache = (() => {
       if (m.kind === FEED_EVENT_KIND && m.payload) {
         const { type, data } = m.payload;
         if (type === "item:like")   try { window.applyItemLikeEvent?.(data); } catch {}
+        if (data?.id || data?.itemId) { try { renderCountFromStore(String(data.id || data.itemId)); } catch {} }
         if (type === "vote:update") {
           try {
             const id = String(data?.id || data?.itemId || "");
@@ -2834,7 +2864,9 @@ const LikeCache = (() => {
 
       }
     });
-  } catch {}
+  } catch {
+    __bcFeed = null; // Safari 프라이빗 등: storage 폴백만 사용
+  }
 
   // === FEED → other tabs (me.html) 알림 브릿지: 내가 한 행동을 방송 ===
   function bcNotifySelf(type, data){
@@ -3039,3 +3071,4 @@ const LikeCache = (() => {
   })();
 
 })();
+
