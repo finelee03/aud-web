@@ -755,7 +755,6 @@
     add(`.feed-card .media, .pm-left .media{
       background: var(--bg, transparent);
       padding: var(--pad, 0%);
-      border-radius: 12px;
     }`);
     add(`.feed-card .media img, .pm-left .media img{
       display:block;

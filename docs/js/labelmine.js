@@ -2488,7 +2488,7 @@ function goMineAfterShare(label = getLabel()) {
 
     right.append(acct, caption, meta, picker.el, marginGroup);
 
-    stageImg.addEventListener("load", applyMarginPX);
+     stageImg.addEventListener("load", applyMarginPX);
 
 
     // 글로벌 닫기
@@ -2763,36 +2763,30 @@ function goMineAfterShare(label = getLabel()) {
   // 6) Mount Post Button (액션바 + POST 버튼)
   //    - CSS 클래스 위임. JS에서 레이아웃 인라인 지정하지 않음.
   // ─────────────────────────────────────────────────────────────
-  function mountPostButton(){
-    const wrap = document.getElementById('sdf-wrap');
-    const drawWrap = document.querySelector('.labelmine-draw-wrap') || wrap?.parentElement || document.querySelector('main.labelmine-body') || document.body;
-    if (!wrap || !drawWrap) return;
+  function mountPostButton() {
+    // 1) 이미 있는 버튼을 최우선으로 사용
+    let btn = document.getElementById('feed-open-btn') 
+          || document.querySelector('.feed-open-btn');
 
-    let bar = drawWrap.querySelector('.sdf-actionbar');
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.className = 'sdf-actionbar';
-      drawWrap.insertBefore(bar, wrap);
-    }
-
-    let btn = document.getElementById('feed-open-btn');
-    if (!btn) {
+    if (btn) {
+      // id만 보정 (있어도 클래스는 절대 건드리지 않음)
+      if (!btn.id) btn.id = 'feed-open-btn';
+    } else {
+      // 2) 없을 때만 새로 생성 (기본 모디파이어 포함)
       btn = document.createElement('button');
       btn.id = 'feed-open-btn';
       btn.type = 'button';
-      btn.className = 'feed-open-btn';
+      btn.className = 'feed-open-btn feed-open-btn--bottom'; // ← 유지!
       btn.textContent = 'POST';
-    } else {
-      btn.classList.add('feed-open-btn');
-      btn.classList.remove('feed-open-btn--bottom');
+      document.body.appendChild(btn);
     }
 
+    // 클릭 바인딩(중복 방지)
     if (!btn.dataset.bound) {
       btn.addEventListener('click', openFeedModal);
       btn.dataset.bound = '1';
       btn.setAttribute('aria-label', '새 게시물 만들기');
     }
-    if (btn.parentElement !== bar) bar.appendChild(btn);
   }
 
   // ─────────────────────────────────────────────────────────────
