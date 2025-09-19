@@ -42,6 +42,7 @@ async function __pushStateKeepalive(){
     labelSelected: readSelectedLabel(),
     timestamps: loadTimestamps(),
     hearts: loadHearts(),
+    likes: loadLikes(), 
     jibs: { selected: readJibSelected(), collected: [...readJibCollectedSet()] },
   };
   try {
@@ -61,6 +62,7 @@ async function __flushSnapshot(opts = { server: true }){
     __forceLsSet(JIB_SYNC_KEY,    { type:"set", arr: [...readJibCollectedSet()] });
     __forceLsSet(HEARTS_SYNC_KEY, { map: loadHearts() });
     __forceLsSet(TS_SYNC_KEY,     { map: loadTimestamps() });
+    __forceLsSet(LIKES_SYNC_KEY,  { map: loadLikes() });
     // 2) 서버에도 푸시(옵션)
     if (opts.server) await __pushStateKeepalive();
   } catch {}
@@ -104,9 +106,9 @@ let JIB_COLLECTED_EVT  = "jib:collection-changed";
 let LABEL_SELECTED_EVT   = "label:selected-changed";
 let LABEL_COLLECTED_EVT  = "label:collected-changed";
 
-let LABEL_SYNC_KEY, JIB_SYNC_KEY, HEARTS_SYNC_KEY, TS_SYNC_KEY;
+let LABEL_SYNC_KEY, JIB_SYNC_KEY, HEARTS_SYNC_KEY, TS_SYNC_KEY, LIKES_SYNC_KEY;
 let STATE_UPDATED_AT_LS;
-let LABEL_COLLECTED_KEY, LABEL_TEMP_KEY, TIMESTAMPS_KEY, HEARTS_KEY, LABEL_SELECTED_KEY;
+let LABEL_COLLECTED_KEY, LABEL_TEMP_KEY, TIMESTAMPS_KEY, HEARTS_KEY, LABEL_SELECTED_KEY, LIKES_KEY;
 let SESSION_INIT_KEY;
 let JIB_SELECTED_KEY, JIB_COLLECTED_KEY;
 
@@ -115,11 +117,13 @@ function recalcKeys(){
   JIB_SYNC_KEY         = nsKey("jib:sync");
   HEARTS_SYNC_KEY      = nsKey("label:hearts-sync");
   TS_SYNC_KEY          = nsKey("label:ts-sync");
+  LIKES_SYNC_KEY       = nsKey("itemLikes:sync"); 
   STATE_UPDATED_AT_LS  = nsKey("state:updatedAt");
   LABEL_COLLECTED_KEY  = nsKey("collectedLabels");
   LABEL_TEMP_KEY       = nsKey("tempCollectedLabels");
   TIMESTAMPS_KEY       = nsKey("labelTimestamps");
   HEARTS_KEY           = nsKey("labelHearts");
+  LIKES_KEY            = nsKey("itemLikes");  
   LABEL_SELECTED_KEY   = nsKey("aud:selectedLabel");
   SESSION_INIT_KEY     = nsKey("sdf-session-init-v1");
   JIB_SELECTED_KEY     = nsKey("jib:selected");
@@ -129,6 +133,7 @@ recalcKeys();
 
 window.LABEL_SYNC_KEY = LABEL_SYNC_KEY;  // e.g., "label:sync:<ns>"
 window.JIB_SYNC_KEY   = JIB_SYNC_KEY;    // e.g., "jib:sync:<ns>"
+window.LIKES_SYNC_KEY = LIKES_SYNC_KEY;
 
 /* ── 로그인/로그아웃 등 Auth 상태 변경 감지: NS 재계산 + 필요 시 세션→로컬 이관 ───────── */
 (function installAuthNSWatcher(){
@@ -306,6 +311,35 @@ function safeParse(raw, fb){
   try{ return JSON.parse(raw); }catch{ return fb; }
 }
 
+// === itemLikes: 계정(네임스페이스)별 per-item 좋아요 의도/스냅샷 ===
+// 구조: { [itemId]: { l: boolean, c?: number, t: epochMs } }
+function loadLikes(){
+  return safeParse(S.getItem(LIKES_KEY), {}) || {};
+}
+function saveLikes(map){
+  try{
+    S.setItem(LIKES_KEY, JSON.stringify(map));
+    // 탭 간 동기화
+    emitSync(LIKES_SYNC_KEY, { map });
+    // 서버 동기화 (선택)
+    scheduleServerSync();
+    // 내부 이벤트가 필요하면: window.dispatchEvent(new Event("itemLikes:changed"));
+  }catch{}
+}
+// 편의: 한 건 갱신
+function setLikeIntent(itemId, liked, likes){
+  const m = loadLikes();
+  m[String(itemId)] = { l: !!liked, c: (typeof likes==="number"? Math.max(0, likes) : (m[String(itemId)]?.c ?? undefined)), t: Date.now() };
+  saveLikes(m);
+}
+function getLikeIntent(itemId){
+  const r = loadLikes()[String(itemId)];
+  return r ? { liked: !!r.l, likes: (typeof r.c==="number"? r.c : null), t: r.t||0 } : null;
+}
+window.readLikesMap = () => ({ ...loadLikes() });
+window.setLikeIntent = setLikeIntent;
+window.getLikeIntent = getLikeIntent;
+
 /* Storage 라우팅 래퍼: 게스트=SESSION, 회원=LOCAL */
 const S = new (class {
   _current() {
@@ -386,6 +420,12 @@ function emitSync(kindKey, payload){
 /** 수신 핸들러: 외부에서 온 변경을 세션에 반영(루프 금지) */
 function applyIncoming(kindKey, payload){
   try{
+    if (kindKey === LIKES_SYNC_KEY && payload?.map){
+      // 세션에만 반영 (재브로드캐스트 금지)
+      S.setItem(LIKES_KEY, JSON.stringify(payload.map));
+      // window.dispatchEvent(new Event("itemLikes:changed"));
+      return;
+    }
     if (kindKey === HEARTS_SYNC_KEY && payload?.map){
       // 세션 하트 맵 갱신만 (재브로드캐스트 금지)
       S.setItem(HEARTS_KEY, JSON.stringify(payload.map));
@@ -498,6 +538,7 @@ async function pushStateToServer() {
     labelSelected: readSelectedLabel(),
     timestamps: loadTimestamps(),
     hearts: loadHearts(),
+    likes: loadLikes(), 
     jibs: {
       selected: readJibSelected(),
       collected: [...readJibCollectedSet()],
@@ -1042,6 +1083,15 @@ labels.getHearts = function getHearts() { return { ...loadHearts() }; };
       }
     }
 
+    const lastLikes = persistEnabled() ? lsGet(LIKES_SYNC_KEY) : null;
+    if (lastLikes){
+      const { map } = safeParse(lastLikes, {});
+      if (map && typeof map === "object"){
+        S.setItem(LIKES_KEY, JSON.stringify(map));
+        // window.dispatchEvent(new Event("itemLikes:changed"));
+      }
+    }
+
     const lastTs = persistEnabled() ? lsGet(TS_SYNC_KEY) : null;
     if (lastTs){
       const { map } = safeParse(lastTs, {});
@@ -1096,6 +1146,13 @@ function rehydrateFromSnapshots(){
         window.dispatchEvent(new Event("label:hearts-changed"));
       }
     }
+    const lastLikes = localStorage.getItem(LIKES_SYNC_KEY);
+    if (lastLikes){
+      const { map } = JSON.parse(lastLikes || "{}");
+      if (map && typeof map === "object"){
+        S.setItem(LIKES_KEY, JSON.stringify(map));
+      }
+    }
     const lastTs = localStorage.getItem(TS_SYNC_KEY);
     if (lastTs){
       const { map } = JSON.parse(lastTs || "{}");
@@ -1111,7 +1168,8 @@ function rehydrateFromSnapshots(){
 function __clearSessionStateForNS(ns){
   const bases = [
     "collectedLabels","tempCollectedLabels","labelTimestamps","labelHearts",
-    "aud:selectedLabel","jib:selected","jib:collected","sdf-session-init-v1"
+    "aud:selectedLabel","jib:selected","jib:collected","sdf-session-init-v1",
+    "itemLikes"
   ];
   for (const base of bases){
     try { sessionStorage.removeItem(`${base}:${ns}`); } catch {}

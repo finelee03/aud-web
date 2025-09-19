@@ -1280,6 +1280,11 @@ const LikeCache = (() => {
         : prevLiked;
       const nextLikes = (typeof likes === 'number') ? likes : (STATE.get(id)?.likes ?? null);
       commit(id, nextLiked, nextLikes);
+
+      if (typeof likes !== 'number') {
+        throttleFetchLikes(id, ns);
+      }
+
       try { if (isMineEvent) LikeCache?.set?.(viewerNS(), id, nextLiked, nextLikes); } catch {}
     } catch {}
   };
@@ -1330,6 +1335,25 @@ const LikeCache = (() => {
       inflight.delete(id);
       try { btn?.removeAttribute('aria-busy'); if (btn) btn.disabled = false; } catch {}
     }
+  }
+
+  // [ADD] throttle된 스냅샷 리프레시 큐 (id별 1회/250ms)
+  const __LIKE_REFRESH_Q = new Map();
+  function throttleFetchLikes(id, ns){
+    if (__LIKE_REFRESH_Q.has(id)) return;
+    const t = setTimeout(async () => {
+      __LIKE_REFRESH_Q.delete(id);
+      try {
+        const snap = await fetchSnapshot(id, ns);
+        if (snap && (typeof snap.likes === "number")) {
+          // liked는 내 계정 상태와 분리되므로 덮어쓰지 않고, '개수'만 권위값으로 반영
+          commit(id, /*liked*/ null, /*likes*/ snap.likes);
+          // 로컬 캐시도 개수만 갱신(계정 분리 유지)
+          try { LikeCache?.set?.(viewerNS(), id, (STATE.get(id)?.liked ?? null), snap.likes); } catch {}
+        }
+      } catch {}
+    }, 250);
+    __LIKE_REFRESH_Q.set(id, t);
   }
 
   // 공개 심볼 재지정
