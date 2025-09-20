@@ -36,9 +36,9 @@
   --green: #A9B9CF;
   --green-deep: #A9B9CF;
 
-    /* Icons (data URI) */
+  /* Icons (data URI) */
   --ico-bell-off: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%237b8192' d='m20,8c2.206,0,4-1.794,4-4s-1.794-4-4-4-4,1.794-4,4,1.794,4,4,4Zm0-6c1.103,0,2,.897,2,2s-.897,2-2,2-2-.897-2-2,.897-2,2-2Zm3.272,14.247l-.005-.019s0,0,0-.001h0l-1.573-6.473c-.538.158-1.105.247-1.694.247-.104,0-.205-.01-.308-.016l1.637,6.735c.002.007.007.012.008.02h-.004c.082.308.021.615-.169.866-.192.255-.476.395-.796.395H3.493c-.305,0-.589-.137-.778-.371-.192-.24-.264-.548-.207-.812l2.352-9.117c.746-3.356,3.682-5.7,7.14-5.7.773,0,1.523.132,2.232.361.188-.661.484-1.275.872-1.821-.979-.348-2.025-.539-3.104-.539C7.598,0,3.859,2.988,2.916,7.233L.564,16.352c-.197.89.018,1.811.591,2.528.573.712,1.426,1.12,2.338,1.12h3.608c.465,2.279,2.484,4,4.899,4s4.434-1.721,4.899-4h3.47c.947,0,1.817-.433,2.39-1.186.556-.733.739-1.66.514-2.55-.001-.006,0-.011,0-.017Zm-11.272,5.753c-1.302,0-2.402-.839-2.816-2h5.631c-.414,1.161-1.514,2-2.816,2Z'/></svg>");
---ico-bell-on:  url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23FF884D' d='m23.63,16.862l-2.03-7.973c-.356.073-.723.111-1.1.111-.733,0-1.431-.147-2.072-.408l2.14,8.408H3.419l2.291-8.955c.66-2.971,3.247-5.045,6.29-5.045,1.076,0,2.105.27,3.013.748-.004-.083-.013-.164-.013-.248,0-.993.269-1.923.731-2.729-1.154-.498-2.419-.771-3.731-.771C7.54,0,3.75,3.041,2.793,7.348L.321,17.011c-.153.702.035,1.47.503,2.053.478.596,1.188.937,1.951.937h4.142c.563,2.293,2.617,4,5.084,4s4.521-1.707,5.084-4h4.128c.789,0,1.515-.36,1.99-.986.407-.535.562-1.193.472-1.846-.004-.101-.019-.204-.045-.306Zm-6.63-13.362c0-1.93,1.57-3.5,3.5-3.5s3.5,1.57,3.5,3.5-1.57,3.5-3.5,3.5-3.5-1.57-3.5-3.5Z'/></svg>");
+  --ico-bell-on:  url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23FF884D' d='m23.63,16.862l-2.03-7.973c-.356.073-.723.111-1.1.111-.733,0-1.431-.147-2.072-.408l2.14,8.408H3.419l2.291-8.955c.66-2.971,3.247-5.045,6.29-5.045,1.076,0,2.105.27,3.013.748-.004-.083-.013-.164-.013-.248,0-.993.269-1.923.731-2.729-1.154-.498-2.419-.771-3.731-.771C7.54,0,3.75,3.041,2.793,7.348L.321,17.011c-.153.702.035,1.47.503,2.053.478.596,1.188.937,1.951.937h4.142c.563,2.293,2.617,4,5.084,4s4.521-1.707,5.084-4h4.128c.789,0,1.515-.36,1.99-.986.407-.535.562-1.193.472-1.846-.004-.101-.019-.204-.045-.306Zm-6.63-13.362c0-1.93,1.57-3.5,3.5-3.5s3.5,1.57,3.5,3.5-1.57,3.5-3.5,3.5-3.5-1.57-3.5-3.5Z'/></svg>");
   --notify-on: #FF884D;
 }
 
@@ -189,7 +189,48 @@ header.nav{
 }
 .btn.primary:hover, .btn-primary:hover{ filter: brightness(.98); transform: translateY(-1px); }
 .btn.ghost{ background: #fff; color: #111; }
-.btn-logout { pointer-events:auto; z-index:1000; } 
+
+/* --- Logout: 텍스트만 (아이콘 공간 제거) --- */
+.btn-logout{
+  appearance: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0; /* ← 0으로 고정 */
+  min-width: 160px; padding: 12px 20px; line-height: 1;
+  font-size: 15px; font-weight: 600; letter-spacing: .2px;
+  border: 1px solid rgba(0,0,0,.14); border-radius: 9999px;
+  background: #e9e9ec; color: #111; cursor: pointer;
+  transition: background .18s ease, box-shadow .18s ease, transform .06s ease, color .18s ease, opacity .18s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+.btn-logout:hover{ background: #dedee2; }
+.btn-logout:focus{ outline: none; box-shadow: 0 0 0 3px rgba(255,167,101,.25); }
+.btn-logout:active{ background: var(--accent); color:#111; transform: translateY(1px); }
+.btn-logout[aria-busy="true"]{ background: var(--accent); color:#111; opacity: .95; pointer-events: none; }
+
+/* --- Delete: 원형 버튼 + 마스크 아이콘 --- */
+.btn-delete{
+  inline-size: 44px;
+  block-size: 44px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  background: #e9e9ec;
+  color: #111; /* 아이콘 색은 currentColor로 따라감 */
+  border: 1px solid rgba(0,0,0,.14);
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  cursor: pointer;
+  transition: background .18s ease, transform .06s ease, opacity .18s ease, color .18s ease;
+}
+.btn-delete::before{
+  content:"";
+  inline-size: 22px; block-size: 22px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><path d='M18 8L22 12M22 12L18 16M22 12H9M15 4.20404C13.7252 3.43827 12.2452 3 10.6667 3C5.8802 3 2 7.02944 2 12C2 16.9706 5.8802 21 10.6667 21C12.2452 21 13.7252 20.5617 15 19.796' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><path d='M18 8L22 12M22 12L18 16M22 12H9M15 4.20404C13.7252 3.43827 12.2452 3 10.6667 3C5.8802 3 2 7.02944 2 12C2 16.9706 5.8802 21 10.6667 21C12.2452 21 13.7252 20.5617 15 19.796' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
+}
+.btn-delete:hover{ background:#dedee2; }
+.btn-delete:active{ background: var(--accent); transform: translateY(1px); }
+.btn-delete[aria-busy="true"]{ opacity:.6; pointer-events:none; }
 
 /* =====================================================================
    7) Insights (상단 KPI)
@@ -282,18 +323,6 @@ progress#m-rate-bar::-webkit-progress-value{
 
 /* =====================================================================
    10) Notifications panel
-   기대 HTML
-     <article class="panel notify">
-       <div class="panel-head">
-         <h3>알림</h3>
-         <label class="switch">
-           <input id="notify-toggle" type="checkbox" />
-           <span class="slider" aria-hidden="true"></span>
-         </label>
-       </div>
-       <ul id="notify-list" class="notify-list"></ul>
-       <p id="notify-empty" class="notify-empty">아직 알림이 없습니다</p>
-     </article>
 ===================================================================== */
 .panel.notify .panel-head{
   display:flex; align-items:center; justify-content:space-between;
@@ -301,7 +330,7 @@ progress#m-rate-bar::-webkit-progress-value{
 }
 .panel.notify h3{ margin:0; font-size:16px; font-weight:700; letter-spacing:.2px; }
 
-/* ===================== 토글 스위치: 아이콘 색만 변환 ===================== */
+/* 토글 스위치 */
 .switch{
   position: relative;
   display: inline-flex;
@@ -311,85 +340,63 @@ progress#m-rate-bar::-webkit-progress-value{
   cursor: pointer;
   user-select: none;
 }
-
-/* 실제 체크박스 숨김 */
 .switch input{
   position: absolute;
   inset: 0;
   opacity: 0;
   pointer-events: none;
 }
-
-/* 캡슐(배경은 항상 동일, 색 안 바뀜) */
 .switch .slider{
   position: relative;
   display: block;
   width: 42px;
   height: 24px;
   border-radius: 999px;
-  background: #E6E8EF; /* ✔ 배경 유지 */
+  background: #E6E8EF;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
   transition: box-shadow .18s ease;
 }
-
-/* 키보드 포커스 링 */
 .switch input:focus-visible + .slider{
   outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: 999px;
 }
-
-/* 중앙 아이콘 (기본: OFF 아이콘) */
 .switch .slider::after{
   content:"";
   position:absolute; inset:0;
   width:18px; height:18px; margin:auto;
   background: center / 18px 18px no-repeat var(--ico-bell-off);
 }
-
-/* 체크 시 아이콘만 주황(#FF884D)으로 변경 */
 .switch input:checked + .slider::after{
-  background-image: var(--ico-bell-on); /* 데이터 URI에 fill=%23FF884D */
+  background-image: var(--ico-bell-on);
 }
 
-/* ===================== 아이콘형 스위치(선택형) ===================== */
-/* 구조 예:
-   <label class="switch icon">
-     <input id="notify-toggle" type="checkbox" />
-     <span class="notify-icon"></span>
-   </label>
-*/
+/* 아이콘형 스위치(선택형) */
 .switch.icon{
   width:auto; height:auto;
   display:inline-flex; align-items:center; justify-content:center;
   padding:6px;
   border-radius:10px;
-  background: transparent; /* ✔ 배경 안 바꿈 */
+  background: transparent;
   cursor:pointer;
   -webkit-tap-highlight-color: transparent;
 }
-
-/* 아이콘 본체: 기본은 OFF 아이콘(회색/검정) */
 .switch.icon .notify-icon{
   inline-size: 24px;
   block-size: 24px;
   flex: 0 0 24px;
   background: center / contain no-repeat var(--ico-bell-off);
 }
-
-/* 체크 시 아이콘만 주황(#FF884D) */
 .switch.icon input:checked ~ .notify-icon{
-  background-image: var(--ico-bell-on); /* fill=%23FF884D */
+  background-image: var(--ico-bell-on);
 }
-
-/* 접근성: 포커스 */
 .switch.icon input:focus-visible ~ .notify-icon{
   outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: 6px;
 }
 
-/* 알림 리스트/아이템 */
+/* 알림 리스트 */
 .notify-list{
   list-style:none; margin:0; padding:0;
   display:flex; flex-direction:column; gap:.5rem;
@@ -413,34 +420,17 @@ progress#m-rate-bar::-webkit-progress-value{
 .notice .time{ font-size:.85rem; color:#7b8192; margin-left:.75rem; }
 .notice .sub{ margin:.35rem 0 0; color:#586074; font-size:.92rem; line-height:1.35; }
 
-/* 빈 상태 */
 .notify-empty{ margin:.5rem 0 0; color:#8a8f9f; font-size:.92rem; }
-
-/* 패널을 위치 기준으로 만들기 */
-.panel.notify { 
-  position: relative; 
-}
-
-/* 토글을 우측 상단에 고정 */
+.panel.notify { position: relative; }
 .panel.notify .notify-toggle{
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
+  position: absolute; top: 12px; right: 12px; z-index: 2;
 }
-
-/* 제목과 겹치지 않게 오른쪽 여백 확보(아이콘 폭+여유) */
 .panel.notify .panel-title{
-  margin: 0 0 .5rem;
-  font-size: 16px;
-  font-weight: 700;
-  padding-right: 48px;  /* 토글 가로 약 24px + 여백 */
+  margin: 0 0 .5rem; font-size: 16px; font-weight: 700; padding-right: 48px;
 }
-
-
 
 /* =====================================================================
-   11) PM Sheet (양옆 → 세로 전환 규칙)
+   11) PM Sheet
 ===================================================================== */
 .pm.sheet{
   inline-size: min(100%, var(--sheet-w-max));
@@ -450,12 +440,10 @@ progress#m-rate-bar::-webkit-progress-value{
   gap: var(--pm-gutter);
   align-items: stretch;
 }
-/* 컨테이너 쿼리 */
 .pm.sheet{ container-type: inline-size; }
 @container (max-width: 980px){
   .pm.sheet{ grid-template-columns: 1fr; }
 }
-/* 폴백 */
 @media (max-width: 1000px){
   .pm.sheet{ grid-template-columns: 1fr; }
 }
@@ -469,7 +457,7 @@ progress#m-rate-bar::-webkit-progress-value{
 }
 
 /* =====================================================================
-   12) Modal (편집 모달: #edit-modal)
+   12) Modal (편집 모달)
 ===================================================================== */
 .modal{
   position: fixed; inset: 0;
@@ -538,8 +526,7 @@ progress#m-rate-bar::-webkit-progress-value{
   clip: rect(0, 0, 1px, 1px); white-space: nowrap; border: 0;
 }
 
-
-/* ====== Imported from mine.css: footer + logout button (for me.html) ====== */
+/* ====== Footer (mine.css subset) ====== */
 .mine-footer{
   margin-top: 48px; padding: 24px 0 64px;
   border-top: 1px solid rgba(0,0,0,.06); background: transparent;
@@ -549,41 +536,7 @@ progress#m-rate-bar::-webkit-progress-value{
   padding: 0 var(--container-pad, 24px);
   margin: 0 auto; display: flex; justify-content: center;
 }
-
-/* 버튼 간 간격(옵셔널: 이미 규칙 있으면 생략) */
 .mine-footer .footer-inner .btn-logout + .btn-logout { margin-left: 8px; }
-
-/* 탈퇴 버튼 전용(룩은 .btn-logout 상속) */
-.btn-delete .ico-delete { inline-size: 20px; block-size: 20px; }
-
-/* 180° 회전 전용 유틸 */
-.rotate-180 { transform: rotate(180deg); display: inline-block; }
-
-
-.btn-logout{
-  appearance: none;
-  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  min-width: 160px; padding: 12px 20px; line-height: 1;
-  font-size: 15px; font-weight: 600; letter-spacing: .2px;
-  border: 1px solid rgba(0,0,0,.14); border-radius: 9999px;
-  background: #e9e9ec; color: #111; cursor: pointer;
-  transition: background .18s ease, box-shadow .18s ease, transform .06s ease, color .18s ease, opacity .18s ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,.06);
-}
-
-.btn-logout:hover{ background: #dedee2; }
-
-.btn-logout:focus{ outline: none; box-shadow: 0 0 0 3px rgba(255,167,101,.25); }
-
-.btn-logout:active{ background: var(--accent); color:#111; transform: translateY(1px); }
-
-.btn-logout[aria-busy="true"]{ background: var(--accent); color:#111; opacity: .95; pointer-events: none; }
-
-.btn-logout .icon-logout.ico{
-  --ico: url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512.292%20512.292%22%3E%3Cpath%20d%3D%22M256.061%2C0L256.061%2C0c17.673%2C0%2C32%2C14.327%2C32%2C32v106.667c0%2C17.673-14.327%2C32-32%2C32l0%2C0c-17.673%2C0-32-14.327-32-32V32C224.061%2C14.327%2C238.387%2C0%2C256.061%2C0z%22/%3E%3Cpath%20d%3D%22M330.727%2C105.387L330.727%2C105.387c-0.157%2C10.742%2C5.259%2C20.8%2C14.315%2C26.581c80.432%2C49.143%2C105.796%2C154.185%2C56.652%2C234.616S247.51%2C472.38%2C167.078%2C423.237S61.282%2C269.052%2C110.426%2C188.62c14.042-22.982%2C33.324-42.315%2C56.269-56.418c9.211-5.781%2C14.773-15.92%2C14.699-26.795l0%2C0c0.049-17.673-14.238-32.039-31.911-32.088c-6.07-0.017-12.02%2C1.693-17.155%2C4.931C22.233%2C146.634-11.58%2C291.318%2C56.803%2C401.412s213.067%2C143.907%2C323.161%2C75.524s143.907-213.067%2C75.524-323.161c-19.035-30.645-44.879-56.489-75.524-75.524c-14.997-9.461-34.824-4.973-44.285%2C10.024C332.447%2C93.397%2C330.731%2C99.33%2C330.727%2C105.387z%22/%3E%3C/svg%3E');
-}
-
-.btn-logout .icon-logout{ width: 20px; height: 20px; flex: 0 0 auto; }
 
 @media (max-width: 624px){
   .mine-footer{ padding-bottom: 48px; }
