@@ -65,6 +65,54 @@
   const getMeId = () => __ME_ID;
   const getMeEmail = () => __ME_EMAIL;
 
+  // ── Author normalize (mine 전용) ─────────────────────────────
+  function _parseJSON(s){ try{ return (typeof s === "string") ? JSON.parse(s) : (s || null); } catch { return null; } }
+
+  /** 백엔드가 author_* 플랫 필드나 user/author JSON 문자열로 줄 때도
+   *  cardHTML 이 기대하는 it.user = { id, displayName, email, avatarUrl } 를 보장한다. */
+  function coerceUserFromItem(it){
+    if (!it || typeof it !== "object") return it;
+
+    // 이미 충분한 user 객체가 있으면 그대로 사용
+    if (it.user && (it.user.displayName || it.user.name || it.user.avatar || it.user.avatarUrl || it.user.email || it.user.id)) {
+      return it;
+    }
+
+    // 가능한 모든 소스에서 작성자 후보를 끌어모음
+    const authorObj =
+      it.author ||
+      _parseJSON(it.author) ||
+      _parseJSON(it.user) ||
+      _parseJSON(it.user_json) ||
+      _parseJSON(it.author_json) ||
+      null;
+
+    const id  = it.user_id || it.owner_id || it.created_by || authorObj?.id || authorObj?.user_id || null;
+    const displayName =
+      it.author_name ||
+      authorObj?.displayName ||
+      authorObj?.name ||
+      it.user_name ||
+      ""; // 없으면 뒤에서 email/placeholder 로 대체
+    const email = it.author_email || authorObj?.email || "";
+    const avatarUrl =
+      it.author_avatar ||
+      authorObj?.avatar ||
+      authorObj?.avatarUrl ||
+      authorObj?.picture ||
+      it.user_avatar ||
+      "";
+
+    it.user = {
+      id: id ? String(id) : null,
+      displayName: (displayName && String(displayName)) || (email && String(email)) || "member",
+      email: email ? String(email) : "",
+      avatarUrl: avatarUrl ? String(avatarUrl) : ""
+    };
+
+    return it;
+  }
+
   // Socket.IO 핸들러에서 BC로 중계할 때 접근할 수 있도록 참조 저장
   let __bcFeed = null;
 
@@ -474,7 +522,7 @@
           else sessionStorage.setItem(SELECTED_KEY, label);
         } catch { try { sessionStorage.setItem(SELECTED_KEY, label); } catch {} }
       });
-      location.assign(`${(window.pageHref? pageHref('labelmine.html') : './labelmine.html')}?label=${encodeURIComponent(label)}`);
+      location.assign(`${safeHref('labelmine.html')}?label=${encodeURIComponent(label)}`);
     });
 
     return btn;
@@ -846,9 +894,11 @@
   const blobURL = (item) => toAPI(`/api/gallery/${encodeURIComponent(item.id)}/blob`);
   const fmtDate = (ts) => {
     try {
-      const d = new Date(Number(ts) || Date.now());
-      const loc = (navigator && navigator.language) ? navigator.language : 'en-US';
-      return d.toLocaleDateString(loc, { year:"numeric", month:"short", day:"2-digit" });
+      // 숫자/문자열/Date 모두 안전 지원
+      const d = ts ? new Date(ts) : new Date();
+      if (isNaN(d.getTime())) return "";
+      const loc = (navigator && navigator.language) ? navigator.language : "en-US";
+      return d.toLocaleDateString(loc, { year: "numeric", month: "short", day: "2-digit" });
     } catch { return ""; }
   };
 
@@ -1054,8 +1104,11 @@
       if (FEED.idxById.has(id)) continue;
 
       const wrap = document.createElement("div");
-      wrap.innerHTML = cardHTML(it);
+      const _it = coerceUserFromItem(it);
+      wrap.innerHTML = cardHTML(_it);
       const card = wrap.firstElementChild;
+
+      assertNoAuthorInGrid(card);
 
       // caption 텍스트 주입 (버그 수정: card 참조 순서)
       const cap = card.querySelector('[data-caption]');
@@ -1087,8 +1140,8 @@
       }
       } catch {}
 
-      FEED.idxById.set(id, FEED.items.length);
-      FEED.items.push(it);
+    FEED.idxById.set(id, FEED.items.length);
+    FEED.items.push(_it);
 
       newIds.push(id);
     }
@@ -1118,7 +1171,7 @@
       const res = await api(`/api/gallery/public?${qs.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("feed-load-failed");
       const j = await res.json();
-      const items = Array.isArray(j?.items) ? j.items : [];
+      const items = (Array.isArray(j?.items) ? j.items : []).map(coerceUserFromItem);
       appendItems(items);
       FEED.cursor = j?.nextCursor || null;
       FEED.end = !FEED.cursor || items.length === 0;
@@ -1520,7 +1573,7 @@
       if (typeof byme === "boolean") item.mine = byme;
     } catch {}
 
-    return item;
+    return coerceUserFromItem(item);
   }
 
 
@@ -1932,7 +1985,7 @@
           const btn = e.target.closest?.('.vote-opt'); if (!btn) return;
           if (btn.classList.contains('is-locked') || btn.disabled) {
             const hint = container.querySelector('.vote-hint');
-            if (hint) hint.textContent = '아직 열지 않은 라벨이에요. 수집하면 #aud가 해제됩니다.';
+            if (hint) hint.textContent = 'This label is not unlocked yet. Collect it to unlock #aud.';
             return;
           }
           const lb = btn.dataset.label;
@@ -2437,9 +2490,9 @@
           <header class="pm-head">
             <h3 id="pm-title" class="pm-title">Post</h3>
             <div class="pm-head-actions">
-              <button type="button" class="pm-prev" aria-label="이전">‹</button>
-              <button type="button" class="pm-next" aria-label="다음">›</button>
-              <button type="button" class="pm-close" aria-label="닫기">✕</button>
+              <button type="button" class="pm-prev" aria-label="Previous">‹</button>
+              <button type="button" class="pm-next" aria-label="Next">›</button>
+              <button type="button" class="pm-close" aria-label="Close">✕</button>
             </div>
           </header>
           <div class="pm-content"></div>
@@ -2486,7 +2539,7 @@
               if (window.store?.setSelected) window.store.setSelected(lb);
               else sessionStorage.setItem(SELECTED_KEY, lb);
             } catch { try { sessionStorage.setItem(SELECTED_KEY, lb); } catch {} }
-            location.assign(`${pageHref('labelmine.html')}?label=${encodeURIComponent(lb)}`);
+            location.assign(`${safeHref('labelmine.html')}?label=${encodeURIComponent(lb)}`);
           }
           return;
         }
@@ -2514,7 +2567,7 @@
         btnDel = document.createElement('button');
         btnDel.type = 'button';
         btnDel.className = 'pm-delete';
-        btnDel.setAttribute('aria-label', '삭제');
+        btnDel.setAttribute('aria-label', 'Delete');
         btnDel.textContent = 'Delete';
         head.insertBefore(btnDel, btnClose || null);
 
@@ -2523,7 +2576,7 @@
           btnDel.addEventListener('click', async () => {
             const id = String(item.id);
             const ns = nsOf(item);
-            const ok = confirm('이 게시물을 삭제할까요? 이 작업은 되돌릴 수 없습니다.');
+            const ok = confirm('Delete this post? This action cannot be undone.');
             if (!ok) return;
 
             // 낙관적: 모달 닫고 카드 제거
@@ -2539,7 +2592,7 @@
                 });
               } catch {}
             } catch {
-              alert('삭제에 실패했습니다. 새로고침 후 다시 시도해 주세요.');
+              alert('Deletion failed. Please refresh and try again.');
             }
           });
         }
@@ -3059,7 +3112,7 @@
       }
         const r = await api(`/api/gallery/public?${qs.toString()}`, { credentials:"include" });
         if (!r || !r.ok) break;
-        const j = await r.json().catch(()=>({})); const items = Array.isArray(j?.items) ? j.items : [];
+        const j = await r.json().catch(()=>({})); const items = (Array.isArray(j?.items) ? j.items : []).map(coerceUserFromItem);
         items.forEach(it => {
           const mine = it?.mine === true || String(it?.ns||"").toLowerCase()===ns || String(it?.owner?.ns||"").toLowerCase()===ns;
           if (mine) out.push(it);
