@@ -2577,7 +2577,7 @@ function goMineAfterShare(label = getLabel()) {
         </svg>`;
 
       const ratioMenu = document.createElement("div");
-      ratioMenu.className = "crop-menu";
+      ratioMenu.className = "crop-pop crop-menu";
       ratioMenu.innerHTML = `
         <button type="button" data-ar="1:1">1:1</button>
         <button type="button" data-ar="1:2">1:2</button>`;
@@ -2595,7 +2595,7 @@ function goMineAfterShare(label = getLabel()) {
         </svg>`;
 
       const zoomWrap = document.createElement("div");
-      zoomWrap.className = "crop-zoom";
+      zoomWrap.className = "crop-pop crop-zoom";ㄴ
       const zoomInput = document.createElement("input");
       zoomInput.type = "range";
       zoomInput.min = "0.5"; zoomInput.max = "4"; zoomInput.step = "0.01"; zoomInput.value = "1";
@@ -2740,9 +2740,8 @@ function goMineAfterShare(label = getLabel()) {
         zoomBtn.addEventListener("click", (e)=>{
           e.stopPropagation();
           // Toggle slider; absolute UI so it never changes stage/canvas size
-          zoomWrap.style.display = "block";
-          zoomWrap.style.visibility =
-            zoomWrap.style.visibility === "hidden" ? "visible" : "hidden";
+          zoomWrap.classList.toggle("is-open");
+          ratioMenu.classList.remove("is-open");
           requestAnimationFrame(draw);
         });
         zoomInput.addEventListener("input", () => {
@@ -2755,7 +2754,8 @@ function goMineAfterShare(label = getLabel()) {
         // ---- Aspect ratio UI ----
         ratioBtn.addEventListener("click",(e)=>{
           e.stopPropagation();
-          ratioMenu.style.display = ratioMenu.style.display === "block" ? "none" : "block";
+          ratioMenu.classList.toggle("is-open");
+          zoomWrap.classList.remove("is-open");ㄴ
           requestAnimationFrame(draw);
         });
         ratioMenu.querySelectorAll("button").forEach(b=>{
@@ -2765,7 +2765,7 @@ function goMineAfterShare(label = getLabel()) {
           });
         });
         back.addEventListener("click", (e)=>{
-          if (!tools.contains(e.target)) { ratioMenu.style.display = "none"; zoomWrap.style.display = "none"; }
+          if (!tools.contains(e.target)) { ratioMenu.classList.remove("is-open"); zoomWrap.classList.remove("is-open"); }
         });
 
         // Keep canvas size in sync
