@@ -2830,15 +2830,20 @@ function openCropModal({ blob, w, h }) {
     }
 
     function setZoomAroundCenter(nextScale) {
-      const cw = canvas.width, ch = canvas.height;
-      const cx = cw / 2, cy = ch / 2;
+      // 프레임 중심을 기준점으로 사용
+      const { fx, fy, fw, fh } = frameRect();
+      const cx = fx + fw / 2;
+      const cy = fy + fh / 2;
+
       const s0  = zoom, tx0 = tx, ty0 = ty;
+      // 현재 스크린 좌표(cx, cy)에서의 월드 좌표(이미지 좌표) 계산
       const wx = (cx - tx0) / s0;
       const wy = (cy - ty0) / s0;
 
       const clamped = Math.max(minCover, Math.min(4, Number(nextScale) || 1));
       zoom = clamped;
 
+      // 동일 월드 포인트(wx, wy)가 스크린(cx, cy)에 고정되도록 보정
       tx = cx - wx * zoom;
       ty = cy - wy * zoom;
     }
