@@ -702,9 +702,40 @@
     });
   }
 
+  // 충돌 방지용 최소 CSS 주입(동일 출처 시트 있으면 거기에, 없으면 <style>)
+  function ensureHeartCSS(){
+    if (ensureHeartCSS.__done) return; ensureHeartCSS.__done = true;
+    function writable(s){ try{ if (s.href) { const u = new URL(s.href, location.href); if (u.origin !== location.origin) return false; } void s.cssRules; return true; } catch { return false; } }
+    let sheet = null;
+    try {
+      const list = Array.from(document.styleSheets || []);
+      sheet = list.find(s => writable(s) && /\/mine\.css(\?|$)/.test(s.href || "")) ||
+              list.find(s => writable(s)) || null;
+    } catch {}
+    if (!sheet) {
+      const tag = document.createElement("style");
+      tag.id = "mine-heart-rules";
+      document.head.appendChild(tag);
+      sheet = tag.sheet;
+    }
+    const add = (r) => { try { sheet.insertRule(r, sheet.cssRules.length); } catch {} };
+
+    add(`.btn-like .ico-heart{ display:none !important; }`);
+    add(`.sticky-foot .btn-like{ min-width:max(44px,28px); min-height:max(44px,28px); padding:0; line-height:0; -webkit-tap-highlight-color:transparent; display:flex; align-items:center; justify-content:flex-start; text-align:left; }`);
+    add(`.sticky-foot .btn-like svg{ width:28px !important; height:28px !important; display:block; }`);
+    add(`.sticky-foot .btn-like svg path, .feed-card .hover-ui .stat svg path{
+      transition: fill .15s, stroke .15s;
+      stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke;
+    }`);
+    add(`.post-modal .sticky-foot, .post-modal .sticky-foot *, .sticky-foot .btn-like, .sticky-foot .btn-like svg, .sticky-foot .btn-like svg path{
+      filter:none !important; mix-blend-mode:normal !important; opacity:1 !important;
+    }`);
+  }
+
   // 전역 노출(다른 코드에서 호출)
   window.setHeartVisual = setHeartVisual;
   window.upgradeHeartIconIn = upgradeHeartIconIn;
+  window.ensureHeartCSS = ensureHeartCSS;
 })();
 
   // 숫자 압축 표기 (15K, 2.1M 등). 미지원 환경이면 원본 출력
