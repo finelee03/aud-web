@@ -2513,7 +2513,7 @@ function goMineAfterShare(label = getLabel()) {
     window.openFeedModal = openFeedModal;
   }
 
-  // labelmine.js — updated openCropModal with in-stage tools & transparent export
+  // labelmine.js — openCropModal (button/slider zoom enabled, gestures disabled)
   function openCropModal({ blob, w, h }) {
     return new Promise((resolve, reject) => {
       document.body.classList.add("is-cropping");
@@ -2564,6 +2564,7 @@ function goMineAfterShare(label = getLabel()) {
       // Tools (inside STAGE → appear over the image box)
       const tools = document.createElement("div");
       tools.className = "crop-tools";
+
       // [1] Aspect Ratio
       const ratioBtn = document.createElement("button");
       ratioBtn.type = "button";
@@ -2581,7 +2582,7 @@ function goMineAfterShare(label = getLabel()) {
         <button type="button" data-ar="1:1">1:1</button>
         <button type="button" data-ar="1:2">1:2</button>`;
 
-      // [2] Zoom
+      // [2] Zoom — ENABLED via slider; gestures are blocked below
       const zoomBtn = document.createElement("button");
       zoomBtn.type = "button";
       zoomBtn.className = "crop-btn";
@@ -2619,11 +2620,11 @@ function goMineAfterShare(label = getLabel()) {
 
       // State
       let ar = "1:1";
-      let zoom = 1;
       let tx = 0, ty = 0;
       let isPanning = false, panStart = {x:0, y:0}, startTX = 0, startTY = 0;
       let viewW = 0, viewH = 0;
       let frame = null;
+      let zoom = 1;
 
       if ("decode" in img) {
         img.decode().then(init).catch(() => { img.onload = init; });
@@ -2645,7 +2646,6 @@ function goMineAfterShare(label = getLabel()) {
         applyAspect(ar);
         centerImage();
         draw();
-        setTimeout(() => draw(), 0);
         bindEvents();
       }
 
@@ -2695,18 +2695,23 @@ function goMineAfterShare(label = getLabel()) {
         const {fw, fh} = frameRect();
         const zx = fw / img.naturalWidth;
         const zy = fh / img.naturalHeight;
-        zoom = Math.max(zx, zy);
-        if (!isFinite(zoom) || zoom <= 0) zoom = 1;
-        zoom = Math.min(Math.max(zoom, 0.5), 4);
-        zoomInput.value = String(zoom);
+        zoom = Math.max(zx, zy);               // cover frame by default
         centerImage();
         draw();
+        // sync slider
+        zoomInput.value = String(Math.max(0.5, Math.min(4, zoom)));
       }
 
       function centerImage(){ tx = 0; ty = 0; }
 
       function bindEvents(){
-        // Panning
+        // ---- Disable wheel/trackpad/pinch zoom (gestures) ----
+        const stopAll = (e)=>{ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
+        ['wheel','gesturestart','gesturechange','gestureend','touchmove'].forEach(t=>{
+          stage.addEventListener(t, stopAll, { passive:false, capture:true });
+        });
+
+        // ---- Panning (kept) ----
         canvas.addEventListener("pointerdown", (e)=>{
           isPanning = true; canvas.setPointerCapture(e.pointerId);
           panStart = { x: e.clientX, y: e.clientY };
@@ -2731,15 +2736,36 @@ function goMineAfterShare(label = getLabel()) {
         canvas.addEventListener("pointercancel", up);
         canvas.addEventListener("lostpointercapture", up);
 
-        // Wheel zoom on stage (cursor-centered)
-        stage.addEventListener("wheel", (e)=>{
-          e.preventDefault();
-          const k = e.ctrlKey || e.metaKey ? 0.002 : 0.0015;
-          const s = Math.exp(-e.deltaY * k);
-          zoomAtPoint(s, e.clientX, e.clientY);
-        }, { passive:false });
+        // ---- Zoom UI (button + slider) ----
+        zoomBtn.addEventListener("click", (e)=>{
+          e.stopPropagation();
+          // Toggle slider; absolute UI so it never changes stage/canvas size
+          zoomWrap.style.display = zoomWrap.style.display === "block" ? "none" : "block";
+          // Defensive: ensure a draw after UI toggle (in case of style/layout flush)
+          requestAnimationFrame(draw);
+        });
+        zoomInput.addEventListener("input", ()=>{
+          const target = Math.max(0.5, Math.min(4, parseFloat(zoomInput.value)||1));
+          setZoomAroundCenter(target);
+        });
 
-        // Resize observer
+        // ---- Aspect ratio UI ----
+        ratioBtn.addEventListener("click",(e)=>{
+          e.stopPropagation();
+          ratioMenu.style.display = ratioMenu.style.display === "block" ? "none" : "block";
+          requestAnimationFrame(draw);
+        });
+        ratioMenu.querySelectorAll("button").forEach(b=>{
+          b.addEventListener("click",()=>{
+            applyAspect(b.dataset.ar);
+            ratioMenu.style.display = "none";
+          });
+        });
+        back.addEventListener("click", (e)=>{
+          if (!tools.contains(e.target)) { ratioMenu.style.display = "none"; zoomWrap.style.display = "none"; }
+        });
+
+        // Keep canvas size in sync
         const ro = new ResizeObserver(()=>{
           const rect = stage.getBoundingClientRect();
           viewW = Math.max(1, Math.floor(rect.width));
@@ -2749,6 +2775,7 @@ function goMineAfterShare(label = getLabel()) {
         });
         ro.observe(stage);
 
+        // Navigation
         backBtn.addEventListener("click", async ()=>{
           cleanup();
           try {
@@ -2767,66 +2794,35 @@ function goMineAfterShare(label = getLabel()) {
         });
 
         globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
-
-        // Tool interactions
-        ratioBtn.addEventListener("click",(e)=>{
-          e.stopPropagation();
-          ratioMenu.style.display = ratioMenu.style.display === "block" ? "none" : "block";
-          zoomWrap.style.display = "none";
-        });
-        ratioMenu.querySelectorAll("button").forEach(b=>{
-          b.addEventListener("click",()=>{
-            applyAspect(b.dataset.ar);
-            ratioMenu.style.display = "none";
-          });
-        });
-        zoomBtn.addEventListener("click",(e)=>{
-          e.stopPropagation();
-          zoomWrap.style.display = zoomWrap.style.display === "block" ? "none" : "block";
-          ratioMenu.style.display = "none";
-        });
-        zoomInput.addEventListener("input", ()=>{
-          const next = Math.max(0.5, Math.min(4, parseFloat(zoomInput.value)||1));
-          const rect = stage.getBoundingClientRect();
-          zoomAtPoint(next/zoom, rect.left + rect.width/2, rect.top + rect.height/2);
-        });
-
-        back.addEventListener("click", (e)=>{
-          // close floating menus when clicking outside tools
-          if (!tools.contains(e.target)) {
-            ratioMenu.style.display = "none";
-            zoomWrap.style.display = "none";
-          }
-        });
       }
 
-      function zoomAtPoint(scale, cx, cy){
+      function setZoomAroundCenter(targetZoom){
         const before = zoom;
-        const next = Math.max(0.5, Math.min(4, before * scale));
+        const next = Math.max(0.5, Math.min(4, targetZoom));
         if (next === before) return;
         const {fx, fy, fw, fh} = frameRect();
-        const px = cx - stage.getBoundingClientRect().left - fx;
-        const py = cy - stage.getBoundingClientRect().top  - fy;
+        const cx = fx + fw/2;
+        const cy = fy + fh/2;
 
         const iw = img.naturalWidth * before;
         const ih = img.naturalHeight * before;
         const dx = fx + tx - iw/2 + fw/2;
         const dy = fy + ty - ih/2 + fh/2;
-        const wx = (px - dx) / before;
-        const wy = (py - dy) / before;
+        const wx = (cx - dx) / before;
+        const wy = (cy - dy) / before;
 
         zoom = next;
         const niw = img.naturalWidth * zoom;
         const nih = img.naturalHeight * zoom;
-        const ndx = px - wx * zoom;
-        const ndy = py - wy * zoom;
+        const ndx = cx - wx * zoom;
+        const ndy = cy - wy * zoom;
         tx = ndx - (fx - fw/2) + niw/2;
         ty = ndy - (fy - fh/2) + nih/2;
 
         overlay.classList.add("is-active");
         draw();
-        clearTimeout(zoomAtPoint._t);
-        zoomAtPoint._t = setTimeout(()=> overlay.classList.remove("is-active"), 120);
+        clearTimeout(setZoomAroundCenter._t);
+        setZoomAroundCenter._t = setTimeout(()=> overlay.classList.remove("is-active"), 120);
       }
 
       async function exportCroppedCanvas(){
