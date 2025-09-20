@@ -314,25 +314,31 @@
       if (typeof rec.c !== 'number') return;
 
       const n = Math.max(0, rec.c);
-      const card = (root instanceof Element) ? root : document;
 
-      // 그리드(hover-ui) 카운트
-      const cnt = card.querySelector?.('[data-like-count]');
-      if (cnt) {
-        cnt.dataset.count = String(n);
-        try { cnt.textContent = (typeof fmtCount === 'function' ? fmtCount(n) : String(n)); }
-        catch { cnt.textContent = String(n); }
-      }
+      // 갱신 대상 카드들: root가 카드면 그 카드만, 아니면 해당 id의 모든 카드
+      const cards = (root instanceof Element && root.matches?.('.feed-card'))
+        ? [root]
+        : Array.from(document.querySelectorAll(`.feed-card[data-id="${CSS.escape(String(id))}"]`));
 
-      // 모달 하단 라인
-      const line = card.querySelector?.('.likes-line');
-      if (line) {
-        try {
-          line.innerHTML = `<span class="likes-count">${(typeof fmtInt==='function'? fmtInt(n) : String(n))}</span> ${(typeof likeWordOf==='function'? likeWordOf(n) : (n<=1?'like':'likes'))}`;
-        } catch {
-          line.textContent = `${n} ${n<=1?'like':'likes'}`;
+      cards.forEach((card) => {
+        // 그리드(hover-ui) 카운트
+        const cnt = card.querySelector('[data-like-count]');
+        if (cnt) {
+          cnt.dataset.count = String(n);
+          try { cnt.textContent = (typeof fmtCount === 'function' ? fmtCount(n) : String(n)); }
+          catch { cnt.textContent = String(n); }
         }
-      }
+
+        // 모달 하단 라인
+        const line = card.querySelector('.likes-line');
+        if (line) {
+          try {
+            line.innerHTML = `<span class="likes-count">${(typeof fmtInt==='function'? fmtInt(n) : String(n))}</span> ${(typeof likeWordOf==='function'? likeWordOf(n) : (n<=1?'like':'likes'))}`;
+          } catch {
+            line.textContent = `${n} ${n<=1?'like':'likes'}`;
+          }
+        }
+      });
     } catch {}
   }
 
