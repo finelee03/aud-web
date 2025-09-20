@@ -2827,11 +2827,8 @@ function goMineAfterShare(label = getLabel()) {
         if (e.key === "Escape") closeAllPanels();
       });
 
-      // 모달 닫힐 때 정리(필요 시 하나만 골라서 사용)
-      const cleanup = () => document.removeEventListener("click", onDocClick, { capture:true });
-      back.addEventListener("click", cleanup, { once:true });
-      globalClose.addEventListener("click", cleanup, { once:true });
-
+      const onEscPanels = (e) => { if (e.key === "Escape") closeAllPanels(); };
+      document.addEventListener("keydown", onEscPanels);
 
       // 존재하는 state 대신 모듈 변수(zoom, tx, ty) 사용
       function setZoomAroundCenter(nextScale) {
@@ -2884,6 +2881,10 @@ function goMineAfterShare(label = getLabel()) {
 
       function cleanup(){
         try { URL.revokeObjectURL(url); } catch {}
+        // ⬇️ 패널 관련 전역 리스너 정리 추가
+        document.removeEventListener("click", onDocClick, { capture:true });
+        document.removeEventListener("keydown", onEscPanels);
+
         window.removeEventListener("keydown", onEsc);
         back.remove();
         document.body.classList.remove("is-cropping");
