@@ -539,6 +539,8 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
 /* 개별 앵커(비율=좌, 줌=우) */
 .crop-menu{ left:16px; }
 .crop-zoom{ right:16px; }
+.crop-menu.is-open { display:block; }
+.crop-zoom.is-open { display:block; }
 
 /* 비율 메뉴 버튼 룩(흰 카드 위) */
 .crop-menu button{
