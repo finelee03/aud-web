@@ -2729,8 +2729,8 @@ function openCropModal({ blob, w, h }) {
     }
 
     function draw() {
-      ctx.clearRect(0,0,viewW,viewH);
-      const {fx, fy, fw, fh} = frameRect();
+      ctx.clearRect(0, 0, viewW, viewH);
+      const { fx, fy, fw, fh } = frameRect();
 
       ctx.save();
       ctx.beginPath();
@@ -2740,8 +2740,11 @@ function openCropModal({ blob, w, h }) {
       const iw = img.naturalWidth, ih = img.naturalHeight;
       const drawW = iw * zoom;
       const drawH = ih * zoom;
+
+      // 🔑 중앙 기준: (프레임 중앙) - (이미지 중앙) + (팬 오프셋)
       const dx = Math.round(fx + tx - drawW/2 + fw/2);
       const dy = Math.round(fy + ty - drawH/2 + fh/2);
+
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, dx, dy, drawW, drawH);
       ctx.restore();
@@ -2938,23 +2941,23 @@ function openCropModal({ blob, w, h }) {
 
 
     function setZoomAroundCenter(nextScale) {
-      // 1) 현재 캔버스 크기(= 스테이지 표시 크기) 기준 중앙 계산
+      // 1) 스테이지(canvas) 실제 렌더 크기 기준 중앙 좌표
       const cw = canvas.width;   // viewW로 설정됨
       const ch = canvas.height;  // viewH로 설정됨
       const cx = cw / 2;
       const cy = ch / 2;
 
-      // 2) 현재 줌/오프셋에서, 중앙이 가리키는 원본 좌표(월드 좌표)를 구한다
+      // 2) 현재 줌/오프셋에서, '화면 중앙'이 바라보는 원본(이미지) 좌표(고정점)
       const s0  = zoom;
       const tx0 = tx;
       const ty0 = ty;
-      const wx = (cx - tx0) / s0;  // 중앙이 바라보는 이미지상의 x (고정점)
-      const wy = (cy - ty0) / s0;  // 중앙이 바라보는 이미지상의 y (고정점)
+      const wx = (cx - tx0) / s0;  // 중앙 기준 원본 x
+      const wy = (cy - ty0) / s0;  // 중앙 기준 원본 y
 
-      // 3) 새 배율 클램핑
+      // 3) 새 배율(슬라이더 최소 배율 minCover ~ 최대 4배)로 클램프
       const s1 = Math.max(minCover, Math.min(4, Number(nextScale) || 1));
 
-      // 4) 고정점(wx, wy)이 확대/축소 후에도 화면 중앙(cx, cy)에 남도록 오프셋 재계산
+      // 4) 확대/축소 후에도 고정점(wx, wy)이 화면 중앙(cx, cy)에 남도록 오프셋 재계산
       zoom = s1;
       tx = cx - wx * zoom;
       ty = cy - wy * zoom;
