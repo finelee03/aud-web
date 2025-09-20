@@ -2701,7 +2701,7 @@ function goMineAfterShare(label = getLabel()) {
       // ── 그리기(현재 tx,ty,zoom,ar 기준으로 프레임 안만 보이게)
       function draw() {
         ctx.save();
-        ctx.fillStyle = "transparent" ; ctx.fillRect(0,0,viewW,viewH);
+        ctx.fillStyle = "fff" ; ctx.fillRect(0,0,viewW,viewH);
         // 프레임 영역 계산
         const {fx, fy, fw, fh} = frameRect();
 
