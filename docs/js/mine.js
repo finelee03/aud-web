@@ -762,6 +762,8 @@
       height:auto;
       object-fit: contain;
       background: transparent;
+      transform: translate(var(--zx, 0%), var(--zy, 0%)) scale(var(--zs, 1)); /* 👈 줌/팬 */
+      transform-origin: center center;
     }`);
   }
 
@@ -930,7 +932,7 @@
 
     return `
     <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
-      <div class="media" style="--pad:${pickPadPct(item)}%;${(pickBgHex(item)||'') ? `--bg:${pickBgHex(item)};` : ''}">
+      <div class="media" style="--pad:${pickPadPct(item)}%;${pickZoomVars(item)}${(pickBgHex(item)||'') ? `--bg:${pickBgHex(item)};` : ''}">
         <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
         <div class="hover-ui" role="group" aria-label="Post actions">
           <div class="actions">
@@ -2403,6 +2405,42 @@
     return /^#([0-9a-f]{6})$/i.test(s) ? s.toLowerCase() : null;
   }
 
+  // [ADD] zoom/crop 정규화 → CSS 변수로
+  function pickZoomVars(it){
+    // 허용 키: it.zoom || it.crop || it.meta.zoom || it.meta.crop
+    const z = it?.zoom ?? it?.crop ?? it?.meta?.zoom ?? it?.meta?.crop ?? null;
+    // 형태 허용: { scale, x, y } / { s, tx, ty } / { zoom, cx, cy } / 숫자만(=scale)
+    let scale = 1, x = 0, y = 0;
+
+    if (typeof z === 'number') {
+      scale = z;
+    } else if (z && typeof z === 'object') {
+      scale = Number(
+        z.scale ?? z.s ?? z.zoom ?? 1
+      );
+      x = Number(
+        z.x ?? z.tx ?? z.cx ?? z.offset_x ?? 0
+      );
+      y = Number(
+        z.y ?? z.ty ?? z.cy ?? z.offset_y ?? 0
+      );
+    }
+
+    // 가드: 말이 안 되는 값 정리
+    if (!Number.isFinite(scale)) scale = 1;
+    if (!Number.isFinite(x)) x = 0;
+    if (!Number.isFinite(y)) y = 0;
+
+    // 적당한 범위 클램프 (필요시 조절)
+    scale = Math.max(1, Math.min(6, scale));   // 1~6배
+    x = Math.max(-100, Math.min(100, x));      // % 단위 (-100% ~ 100%)
+    y = Math.max(-100, Math.min(100, y));
+
+    // CSS 변수 문자열 반환
+    // zx/zy는 % 단위, zs는 배율
+    return `--zs:${scale};--zx:${x}%;--zy:${y}%;`;
+  }
+
   (function PostModalMount(){
     function renderHashtagsFromCaption(root){
       const cap = root?.querySelector('.caption-text');
@@ -2591,7 +2629,7 @@
       <article class="feed-card pm-split" data-id="${item.id}" data-ns="${nsOf(item)}">
         <div class="pm-layout">
           <div class="pm-left">
-            <div class="media" style="--pad:${pickPadPct(item)}%;${(pickBgHex(item)||'') ? `--bg:${pickBgHex(item)};` : ''}">
+            <div class="media" style="--pad:${pickPadPct(item)}%;${pickZoomVars(item)}${(pickBgHex(item)||'') ? `--bg:${pickBgHex(item)};` : ''}">
               <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
             </div>
           </div>
