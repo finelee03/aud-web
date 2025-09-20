@@ -385,11 +385,37 @@ function setLikeCountOnly(itemId, likes){
   m[String(itemId)] = { l: !!cur.l, c: Math.max(0, Number(likes)||0), t: Date.now() };
   saveLikes(m);
 }
+// 서버 스냅샷 병합: 개수(c)만 권위, 의도(l)는 기존 값이 있으면 보존
+function setLikeFromServer(itemId, liked, likes){
+  const m   = loadLikes();
+  const key = String(itemId);
+  const cur = m[key] || {};
+
+  // 이미 로컬에 내 의도(l)가 있으면 그것을 유지
+  const nextLiked =
+    (typeof cur.l === "boolean")
+      ? cur.l
+      : (typeof liked === "boolean" ? !!liked : undefined);
+
+  // 개수(c)는 서버 값을 우선하되 숫자만 허용
+  const nextCount =
+    (typeof likes === "number")
+      ? Math.max(0, Number(likes) || 0)
+      : (typeof cur.c === "number" ? cur.c : undefined);
+
+  m[key] = {
+    ...(nextLiked !== undefined ? { l: nextLiked } : {}),
+    ...(nextCount !== undefined ? { c: nextCount } : {}),
+    t: cur.t || Date.now()
+  };
+  saveLikes(m);
+}
 
 window.readLikesMap = () => ({ ...loadLikes() });
 window.setLikeIntent = setLikeIntent;
 window.getLikeIntent = getLikeIntent;
 window.setLikeCountOnly = setLikeCountOnly;
+window.setLikeFromServer = setLikeFromServer; 
 
 /* Storage 라우팅 래퍼: 게스트=SESSION, 회원=LOCAL */
 const S = new (class {

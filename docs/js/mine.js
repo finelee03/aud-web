@@ -53,81 +53,6 @@
     catch { return String(uid || "default"); }
   };
   try { window.getNS = getNS; } catch {}
-
-  // === Like Store Bridge (fallback) ====================================
-  // 위치: mine.js 상단 쪽, getNS() 다음/HEART UI 이전에 넣기
-  (function(){
-    const has  = (fn)=> typeof window[fn] === 'function';
-    const getNS = (window.getNS ? window.getNS : ()=>'default');
-
-    // 네임스페이스별 키
-    const KEY_MAP  = () => `likes:map:${getNS()}`;         // { [id]: { i:boolean, c:number, t:number } }
-    const KEY_SYNC = () => `likes:sync:${getNS()}`;        // storage 이벤트 브로드캐스트용 (ephemeral)
-    try { if (!window.LIKES_SYNC_KEY) window.LIKES_SYNC_KEY = KEY_SYNC(); } catch {}
-
-    // 내부 유틸
-    const readMap = () => {
-      try { return JSON.parse(localStorage.getItem(KEY_MAP()) || "{}"); }
-      catch { return {}; }
-    };
-    const writeMap = (map) => {
-      // 1) 영속 저장
-      try { localStorage.setItem(KEY_MAP(), JSON.stringify(map)); } catch {}
-
-      // 2) 같은 탭 알림 — ★ bridgeStoreLikesToUI 가 듣는 이름으로 통일
-      try { window.dispatchEvent(new CustomEvent("itemLikes:changed", { detail: { map } })); } catch {}
-
-      // 3) 다른 탭 알림 — storage 이벤트 트리거
-      try {
-        const payload = { at: Date.now(), map };
-        const key = window.LIKES_SYNC_KEY || KEY_SYNC();
-        localStorage.setItem(key, JSON.stringify(payload));
-        // 노이즈 최소화를 위해 잠시 후 삭제 (storage 이벤트만 유발)
-        setTimeout(() => {
-          try {
-            if (localStorage.getItem(key) === JSON.stringify(payload)) {
-              localStorage.removeItem(key);
-            }
-          } catch {}
-        }, 250);
-      } catch {}
-    };
-
-    // 공개 API (없을 때만 주입)
-    if (!has('readLikesMap')) {
-      window.readLikesMap = () => readMap();
-    }
-    if (!has('getLikeIntent')) {
-      window.getLikeIntent = (id) => {
-        const m = readMap(); const r = m[String(id)] || {};
-        return {
-          liked: (typeof r.i === 'boolean' ? r.i : null),
-          likes: (typeof r.c === 'number' ? r.c : null),
-          at:    (typeof r.t === 'number' ? r.t : null),
-        };
-      };
-    }
-    if (!has('setLikeIntent')) {
-      window.setLikeIntent = (id, liked, likes) => {
-        const m = readMap(); const k = String(id);
-        const rec = m[k] || {};
-        if (typeof liked === 'boolean') rec.i = liked;
-        if (typeof likes === 'number')  rec.c = Math.max(0, likes);
-        rec.t = Date.now();
-        m[k] = rec; writeMap(m);
-      };
-    }
-    if (!has('setLikeCountOnly')) {
-      window.setLikeCountOnly = (id, likes) => {
-        const m = readMap(); const k = String(id);
-        const rec = m[k] || {};
-        if (typeof likes === 'number') rec.c = Math.max(0, likes);
-        rec.t = Date.now();
-        m[k] = rec; writeMap(m);
-      };
-    }
-  })();
-
   // === Realtime keys
   const FEED_EVENT_KIND = "feed:event"; // BroadcastChannel에서 사용
   let __ME_ID = null;                   // 로그인한 내 user id 캐시
@@ -1058,12 +983,16 @@
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-        if (typeof likes === "number" && window.setLikeCountOnly) window.setLikeCountOnly(id, likes);
-        if (typeof liked === "boolean" && window.setLikeIntent) window.setLikeIntent(id, liked, likes);
-        const rec = window.getLikeIntent ? window.getLikeIntent(id) : { liked, likes };
-        applyUI(id, rec?.liked ?? liked, (typeof rec?.likes === "number" ? rec.likes : likes));
+          if (typeof likes === "number") window.setLikeCountOnly?.(id, likes);
+          // 서버 스냅샷은 의도 보존 병합
+          if (typeof liked === "boolean" || typeof likes === "number") {
+            window.setLikeFromServer?.(id, liked, likes);
+          }
+          const rec = window.getLikeIntent ? window.getLikeIntent(id) : { liked, likes };
+          applyUI(id, rec?.liked ?? liked, (typeof rec?.likes === "number" ? rec.likes : likes));
           return;
-        }} catch {}
+        }
+      } catch {}
 
       // 2) /api/gallery/:id (폴백)
       try {
@@ -1071,12 +1000,17 @@
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-        if (typeof likes === "number" && window.setLikeCountOnly) window.setLikeCountOnly(id, likes);
-        if (typeof liked === "boolean" && window.setLikeIntent) window.setLikeIntent(id, liked, likes);
-        const rec = window.getLikeIntent ? window.getLikeIntent(id) : { liked, likes };
-        applyUI(id, rec?.liked ?? liked, (typeof rec?.likes === "number" ? rec.likes : likes));
+          if (typeof likes === "number") window.setLikeCountOnly?.(id, likes);
+          // 서버 스냅샷은 의도 보존 병합
+          if (typeof liked === "boolean" || typeof likes === "number") {
+            window.setLikeFromServer?.(id, liked, likes);
+          }
+          const rec = window.getLikeIntent ? window.getLikeIntent(id) : { liked, likes };
+          applyUI(id, rec?.liked ?? liked, (typeof rec?.likes === "number" ? rec.likes : likes));
           return;
-        }} catch {}
+        }
+      } catch {}
+
     });
 
     return Promise.allSettled(jobs);
@@ -1384,12 +1318,11 @@
       if (r) {
         if (typeof r.likes === "number") {
           commit(id, /*liked*/ null, r.likes);
-          if (window.setLikeCountOnly) window.setLikeCountOnly(id, r.likes);
+          window.setLikeCountOnly?.(id, r.likes);
         }
-        if (typeof r.liked === "boolean") {
-          // 의도도 서버가 돌려주면 동기화(최신 의도와 동일할 가능성이 높음)
-          commit(id, r.liked, /*likes*/ null);
-          if (window.setLikeIntent) window.setLikeIntent(id, r.liked);
+        // 서버 스냅샷은 의도 보존 병합(내가 막 클릭한 의도를 덮지 않도록)
+        if (typeof r.liked === "boolean" || typeof r.likes === "number") {
+          window.setLikeFromServer?.(id, r.liked, r.likes);
         }
       }
     } finally {
