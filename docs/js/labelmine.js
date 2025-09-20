@@ -2717,11 +2717,8 @@ function openCropModal({ blob, w, h }) {
       const { fw, fh } = frameRect();
       minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
       const keep = Math.max(minCover, zoom);
-
-      // 화면(캔버스) 정중앙 앵커를 유지한 채 줌 반영
       setZoomAroundCenter(keep);
       zoomInput.value = String(keep);
-
       draw();
     }
 
@@ -2795,11 +2792,9 @@ function openCropModal({ blob, w, h }) {
         viewH = Math.max(1, Math.floor(rect.height));
         canvas.width = viewW; canvas.height = viewH;
 
-        // 프레임 재계산 → minCover 갱신
+        // Recompute frame & minCover, then preserve center-anchored zoom
         const { fw, fh } = frameRect();
         minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
-
-        // 현재 줌을 minCover 이상으로 보정하면서, 화면 중심 앵커 유지
         const keep = Math.max(minCover, zoom);
         setZoomAroundCenter(keep);
         zoomInput.value = String(keep);
