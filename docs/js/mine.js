@@ -989,13 +989,19 @@
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-          if (typeof likes === "number") window.setLikeCountOnly?.(id, likes);
-          // 서버 스냅샷은 의도 보존 병합
-          if (typeof liked === "boolean" || typeof likes === "number") {
-            window.setLikeFromServer?.(id, liked, likes);
+          // 1) 내 로컬 기록이 이미 있으면 그대로 존중(=store를 덮지 않음)
+          const rec = (typeof window.getLikeIntent === "function") ? window.getLikeIntent(id) : null;
+
+          // 2) 로컬 기록이 *없을 때만* 서버 스냅샷으로 seed
+          if (!rec) {
+            if (typeof likes === "number") { try { window.setLikeCountOnly?.(id, likes); } catch {} }
+            if (typeof liked === "boolean") { try { window.setLikeIntent?.(id, liked, likes); } catch {} }
           }
-          const rec = window.getLikeIntent ? window.getLikeIntent(id) : { liked, likes };
-          applyUI(id, rec?.liked ?? liked, (typeof rec?.likes === "number" ? rec.likes : likes));
+
+          // 3) UI는 로컬>서버 우선순위로 반영
+          const useLiked = rec?.liked ?? liked;
+          const useLikes = (typeof rec?.likes === "number") ? rec.likes : likes;
+          applyUI(id, useLiked, useLikes);
           return;
         }
       } catch {}
@@ -1006,13 +1012,19 @@
         const j = await r.json().catch(() => ({}));
         if (r.ok) {
           const { liked, likes } = pick(j) || pick(j.item) || pick(j.data) || {};
-          if (typeof likes === "number") window.setLikeCountOnly?.(id, likes);
-          // 서버 스냅샷은 의도 보존 병합
-          if (typeof liked === "boolean" || typeof likes === "number") {
-            window.setLikeFromServer?.(id, liked, likes);
+          // 1) 내 로컬 기록이 이미 있으면 그대로 존중(=store를 덮지 않음)
+          const rec = (typeof window.getLikeIntent === "function") ? window.getLikeIntent(id) : null;
+
+          // 2) 로컬 기록이 *없을 때만* 서버 스냅샷으로 seed
+          if (!rec) {
+            if (typeof likes === "number") { try { window.setLikeCountOnly?.(id, likes); } catch {} }
+            if (typeof liked === "boolean") { try { window.setLikeIntent?.(id, liked, likes); } catch {} }
           }
-          const rec = window.getLikeIntent ? window.getLikeIntent(id) : { liked, likes };
-          applyUI(id, rec?.liked ?? liked, (typeof rec?.likes === "number" ? rec.likes : likes));
+
+          // 3) UI는 로컬>서버 우선순위로 반영
+          const useLiked = rec?.liked ?? liked;
+          const useLikes = (typeof rec?.likes === "number") ? rec.likes : likes;
+          applyUI(id, useLiked, useLikes);
           return;
         }
       } catch {}
