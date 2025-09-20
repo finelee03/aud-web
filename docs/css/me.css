@@ -556,6 +556,6 @@ progress#m-rate-bar::-webkit-progress-value{
 /* 로그아웃 버튼: 폭 줄이기(푸터 범위 한정) */
 .mine-footer .btn-logout{
   min-width: auto;           /* 고정폭 해제 */
-  padding-inline: 14px;      /* 좌우 패딩 축소 */
+  padding-inline: 18px;      /* 좌우 패딩 축소 */
   white-space: nowrap;       /* 한 줄 유지 */
 }
