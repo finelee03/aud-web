@@ -10,7 +10,11 @@
   try {
     window.CSS = window.CSS || {};
     if (typeof window.CSS.escape !== "function") {
-      window.CSS.escape = (v) => String(v).replace(/["\\]/g, "\\$&");
+      window.CSS.escape = (v) =>
+        String(v).replace(/[^a-zA-Z0-9_\u00A0-\uFFFF-]/g, ch => {
+          const cp = ch.codePointAt(0).toString(16).toUpperCase();
+          return "\\" + cp + " ";
+        });
     }
   } catch {}
 
@@ -342,7 +346,7 @@
   function createMedia(src, speed = 1, opts = { lazy: true }) {
     if (!src) return document.createComment("no-media");
     const isVideo = /\.mp4(\?|$)/i.test(src);
-
+    const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     if (!isVideo) {
       const img = document.createElement("img");
       img.src = src;
@@ -355,14 +359,29 @@
 
     const mountVideo = () => {
       const v = document.createElement("video");
-      v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true;
-      v.preload = "metadata";
-      v.tabIndex = -1;
-      v.className = "media-fill";
-      v.src = src;
+      v.autoplay   = !reduceMotion;
+      v.muted      = true;
+      v.loop       = !reduceMotion;
+      v.playsInline= true;
+      v.preload    = "metadata";
+      v.tabIndex   = -1;
+      v.className  = "media-fill";
+      v.src        = src;
       v.style.pointerEvents = "none";
       v.addEventListener("loadedmetadata", () => { try { v.playbackRate = speed; } catch {} });
-      v.addEventListener("loadeddata", () => v.play().catch(()=>{}), { once: true });
+      if (!reduceMotion) v.addEventListener("loadeddata", () => v.play().catch(()=>{}), { once: true });
+
+      // 화면 밖으로 나가면 일시정지 / 들어오면 재생
+      if ("IntersectionObserver" in window) {
+        const io2 = new IntersectionObserver((ents) => {
+          const vis = ents.some(e => e.isIntersecting);
+          if (reduceMotion) { v.pause(); return; }
+          if (!vis) { try { v.pause(); } catch {} }
+          else { v.play().catch(()=>{}); }
+        }, { rootMargin: "100px", threshold: 0.01 });
+        // 비디오가 DOM에 붙은 뒤 관찰
+        queueMicrotask(() => io2.observe(v));
+      }
       return v;
     };
 
@@ -805,9 +824,9 @@
     return arr;
   }
 
-  async function api(path, opt={}) {
+  async function api(path, opt = {}) {
     const fn = window.auth?.apiFetch || fetch;
-    return fn(path, opt);
+    return fn(toAPI(path), opt);
   }
 
   // === Like endpoint resolver (gallery 우선, 실패 시 items로 1회 폴백; 메서드 폴백은 POST {like}) ===
@@ -818,7 +837,8 @@
   const fmtDate = (ts) => {
     try {
       const d = new Date(Number(ts) || Date.now());
-      return d.toLocaleDateString(undefined, { year:"numeric", month:"short", day:"2-digit" });
+      const loc = (navigator && navigator.language) ? navigator.language : 'en-US';
+      return d.toLocaleDateString(loc, { year:"numeric", month:"short", day:"2-digit" });
     } catch { return ""; }
   };
 
@@ -1101,10 +1121,7 @@
   const api = (p,o)=> (window.auth?.apiFetch ? window.auth.apiFetch(p,o) : fetch(p,o));
   const withCSRF = window.withCSRF || (async (opt)=>opt);
 
-  function getNS(){
-    try { return (localStorage.getItem('auth:userns') || 'default').trim().toLowerCase(); }
-    catch { return 'default'; }
-  }
+  const getNS = (window.getNS ? window.getNS : ()=>'default');
 
   // 🔗 상단 전역 setHeartVisual만 호출 (없으면 안전 폴백)
   const hv = (target, pressed) => {
@@ -1211,7 +1228,7 @@
       } else {
         document
           .querySelectorAll(`.feed-card[data-id="${CSS.escape(String(id))}"]`)
-          .forEach(card => { __writeLikeCountInto(card, st.likes); writeInto(card, st.liked, st.likes); });
+          .forEach(card => { writeInto(card, st.liked, st.likes); });
       }
     };
     (window.requestAnimationFrame || setTimeout)(run);
@@ -1247,12 +1264,15 @@
         : prevLiked;
       const nextLikes = (typeof likes === 'number') ? likes : (STATE.get(id)?.likes ?? null);
       commit(id, nextLiked, nextLikes);
-
+      // 캐시/스토어에도 최신 count 반영
+      if (typeof likes === 'number') { try { window.setLikeCountOnly?.(id, likes); } catch {} }
+      // liked 플래그를 서버가 명시한 경우 의도 캐시 동기화
+      if (liked != null) { try { window.setLikeIntent?.(id, liked, (typeof likes==='number'? likes : undefined)); } catch {} }
       if (typeof likes !== 'number') {
         throttleFetchLikes(id, ns);
       }
 
-      try { if (isMineEvent) LikeCache?.set?.(viewerNS(), id, nextLiked, nextLikes); } catch {}
+      try { window.setLikeIntent?.(id, nextLiked, nextLikes); } catch {}
     } catch {}
   };
 
@@ -1315,7 +1335,7 @@
           // liked는 내 계정 상태와 분리되므로 덮어쓰지 않고, '개수'만 권위값으로 반영
           commit(id, /*liked*/ null, /*likes*/ snap.likes);
           // 로컬 캐시도 개수만 갱신(계정 분리 유지)
-          try { LikeCache?.set?.(viewerNS(), id, (STATE.get(id)?.liked ?? null), snap.likes); } catch {}
+          try { window.setLikeCountOnly?.(id, snap.likes); } catch {}
         }
       } catch {}
     }, 250);
@@ -1869,6 +1889,7 @@
       countsById.set(String(item.id), counts);
       myById.set(String(item.id), my);
       uiUpdate(container, counts, my);
+      try { window.applyItemVoteCounts?.(counts); } catch {}
 
       if (!container.__bound) {
         container.__bound = true;
@@ -1892,7 +1913,7 @@
             countsById.set(id, counts);
             updateEverywhere(id, counts, null);
             bcNotifySelf("self:vote", { id, ns, choice: null, counts });
-
+            try { window.addLabelVoteDelta?.(lb, -1); } catch {}
 
             const res = await unvote(id, ns);
             if (res.counts) { countsById.set(id, res.counts); myById.set(id, res.my); updateEverywhere(id, res.counts, res.my); }
@@ -1903,6 +1924,10 @@
             countsById.set(id, counts);
             updateEverywhere(id, counts, lb);
             bcNotifySelf("self:vote", { id, ns, choice: lb, counts });
+            try {
+              if (prevMy) window.addLabelVoteDelta?.(prevMy, -1);
+              window.addLabelVoteDelta?.(lb, +1);
+            } catch {}
 
             const res = await castVote(id, lb, ns);
             if (res.counts) { countsById.set(id, res.counts); myById.set(id, res.my); updateEverywhere(id, res.counts, res.my); }
@@ -1910,6 +1935,10 @@
               const back = await fetchVotes(id, ns);
               countsById.set(id, back.counts); myById.set(id, back.my);
               updateEverywhere(id, back.counts, back.my);
+            try {
+              const fixed = (res && res.counts) ? res.counts : null;
+              if (fixed) window.setLabelVotesMap?.(fixed); // 서버 스냅샷으로 덮어쓰기
+            } catch {}
             }
           }
 
@@ -2059,6 +2088,17 @@
     if (!ids.length || !__sock) return;
     __sock.emit("unsubscribe", { items: ids });
   }
+
+  window.addEventListener('beforeunload', () => {
+    try { if (__io) { __io.disconnect(); __io = null; } } catch {}
+    try { if (__sock && typeof __sock.close === 'function') { __sock.close(); } } catch {}
+    try {
+      if (observeAvatars.__obs && typeof observeAvatars.__obs.disconnect === 'function') {
+        observeAvatars.__obs.disconnect();
+        observeAvatars.__obs = null;
+      }
+    } catch {}
+  });
 
 
   /* =========================================================
@@ -2293,6 +2333,17 @@
 
   });
 
+  (function ensureA11y(){
+    const root = document;
+    const set = (scope=root) => {
+      scope.querySelectorAll('.likes-line:not([aria-live])').forEach(el => {
+        el.setAttribute('aria-live','polite');
+      });
+    };
+    set(); // 최초 1회
+    try { window.__hookA11yLikes = set; } catch {}
+  })();
+
   /* =========================================================
    * 11) POST MODAL (카드 크게 보기)
    * ========================================================= */
@@ -2319,6 +2370,26 @@
 
     let modal, sheet, content, btnClose, btnPrev, btnNext;
     let currentIndex = -1;
+    let prevFocus = null;
+    let untrapFocus = null;
+
+    function trapFocus(scope){
+      function onKey(e){
+        if (e.key !== 'Tab') return;
+        const focusables = Array.from(
+          scope.querySelectorAll('a,button,input,select,textarea,[tabindex]')
+        ).filter(el => !el.disabled && el.tabIndex !== -1 && el.offsetParent !== null);
+        if (!focusables.length) return;
+
+        const first = focusables[0];
+        const last  = focusables[focusables.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+      scope.addEventListener('keydown', onKey);
+      return () => scope.removeEventListener('keydown', onKey);
+    }
 
     function inject(){
       if ($("#post-modal")) return;
@@ -2412,7 +2483,8 @@
         head.insertBefore(btnDel, btnClose || null);
 
         // 클릭 → 확인 → 낙관적 제거 → 서버 삭제 → 브로드캐스트
-        btnDel.addEventListener('click', async () => {
+        if (!btnDel.__bound) btnDel.addEventListener('click', async () => {
+          btnDel.__bound = true;
           const id = String(item.id);
           const ns = nsOf(item);
           const ok = confirm('이 게시물을 삭제할까요? 이 작업은 되돌릴 수 없습니다.');
@@ -2575,12 +2647,12 @@
         }
       } catch {}
 
-      // 2) LikeCache(영속)로 보정
+      // 2) LikeIntent 캐시(영속)에 의한 보정
       try {
-        const rec = (typeof LikeCache?.get === "function") ? LikeCache.get(viewerNS(), String(it.id)) : null;
+        const rec = (typeof window.getLikeIntent === "function") ? window.getLikeIntent(String(it.id)) : null;
         if (rec) {
-          it.liked = rec.liked;
-          if (typeof rec.likes === "number") it.likes = rec.likes;
+          if (typeof rec.liked === "boolean") it.liked = rec.liked;
+          if (typeof rec.likes === "number")  it.likes = rec.likes;
         }
       } catch {}
       
@@ -2588,7 +2660,7 @@
 
       content.innerHTML = `<div class="pm-card">${modalSplitHTML(it)}</div>`;
       try { renderCountFromStore(it.id, content); } catch {}
-
+      try { window.__hookA11yLikes?.(content); } catch {}
       try { BG.apply([it]); } catch {}
       const hex = pickBgHex(it);
       if (hex) {
@@ -2599,6 +2671,7 @@
       }
 
       const art = content.querySelector(".feed-card");
+      try { window.__hookA11yLikes?.(art); } catch {}
 
       try { upgradeHeartIconIn(art); Avatar.install(art); } catch {}
       // 내 글이면 캐시로 강제 동기화(이름/아바타/데이터-id)
@@ -2671,8 +2744,11 @@
       const it = FEED.items[idx];
       if (it?.id) subscribeItems([String(it.id)]);
       renderAt(idx);
+      prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       modal.hidden = false;
       document.documentElement.style.overflow = "hidden";
+      untrapFocus?.(); // 안전 해제
+      untrapFocus = trapFocus(sheet);
       setTimeout(() => sheet.focus?.(), 0);
     }
 
@@ -2686,27 +2762,46 @@
         if (art) {
           const id = String(art.getAttribute('data-id') || '');
           if (id) {
-            const ns = art.getAttribute('data-ns') || (typeof getNS === 'function' ? getNS() : 'default');
+            // (참고) ns는 여기서 직사용하지 않음. store.js는 id 기준으로 저장/동기화.
             const btn = art.querySelector('.btn-like');
-            const liked = !!(btn && (btn.getAttribute('aria-pressed')==='true' || btn.classList.contains('is-liked')));
+            const liked =
+              !!(btn && (btn.getAttribute('aria-pressed') === 'true' || btn.classList.contains('is-liked')));
+
+            // 카운트 읽기: .likes-count(모달) 우선, 없으면 [data-like-count](그리드) 사용
             let likes = 0;
             const elCount = art.querySelector('.likes-count') || art.querySelector('[data-like-count]');
             if (elCount) {
               likes = elCount.classList?.contains?.('likes-count')
-                ? Number(String(elCount.textContent||'0').replace(/[^\d]/g,'')) || 0
+                ? Number(String(elCount.textContent || '0').replace(/[^\d]/g, '')) || 0
                 : Number(elCount.getAttribute('data-count') || elCount.dataset?.count || 0) || 0;
             }
-            try { setFeedMemoryLike(id, liked, likes); updateLikeUIEverywhere(id, liked, likes); } catch {}
-            try { LikeCache?.set?.(viewerNS(), id, liked, likes); } catch {}
+            // 음수 방지
+            likes = Math.max(0, likes);
+
+            // FEED 메모리 & UI 즉시 반영
+            try { setFeedMemoryLike(id, liked, likes); } catch {}
+            try { updateLikeUIEverywhere(id, liked, likes); } catch {}
+
+            // ★ 단일 소스: store.js에 스냅샷 기록 (LikeCache 제거)
+            // setLikeIntent(id, liked, likes) 가 있으면 의도/카운트를 함께 저장
+            try { window.setLikeIntent?.(id, liked, likes); } catch {}
           }
         }
       } catch {}
 
       // 2) 실제로 닫기
+      untrapFocus?.(); // 포커스 트랩 해제
+      untrapFocus = null;
+
       modal.hidden = true;
       document.documentElement.style.overflow = "";
       currentIndex = -1;
       content.innerHTML = "";
+
+      if (prevFocus && typeof prevFocus.focus === 'function') {
+        try { prevFocus.focus(); } catch {}
+      }
+      prevFocus = null;
     }
 
     window.openPostModalById = openById;
@@ -2778,7 +2873,9 @@
 
       }
     });
-  } catch {}
+  } catch {
+    __bcFeed = null; // Safari 프라이빗 등: storage 폴백만 사용
+  }
 
   // === FEED → other tabs (me.html) 알림 브릿지: 내가 한 행동을 방송 ===
   function bcNotifySelf(type, data){
@@ -2983,4 +3080,3 @@
   })();
 
 })();
-
