@@ -693,8 +693,7 @@ header.nav {
 }
 :is(.labelmine-body, body:has(.labelmine-body)) .cm-stage img,
 :is(.labelmine-body, body:has(.labelmine-body)) .cm-stage canvas{
-  max-width:100%; max-height:100%; display:block; background:#fff !important;
-}
+  max-width:100%; max-height:100%; display:block; }
 
 
 /* Step2(600px) → Step3(950px) 너비 모핑 */
@@ -721,3 +720,14 @@ header.nav {
 .im-zoom { display:flex; align-items:center; gap:.5rem; margin-top:.75rem; }
 .im-zoom-btn { border:1px solid #ddd; background:#fff; width:32px; height:32px; border-radius:8px; font-size:18px; line-height:1; }
 .im-zoom-readout { min-width:3ch; text-align:center; font-variant-numeric: tabular-nums; }
+
+/* Canvas interaction & visibility (unified) */
+:is(.labelmine-body, body:has(.labelmine-body)) .cm-stage canvas {
+  display:block;
+  margin:0 auto;
+  max-width:100%;
+  max-height:100%;
+  height:auto;
+  touch-action:none;
+  image-rendering: auto;
+}
