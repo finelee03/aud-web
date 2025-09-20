@@ -714,7 +714,7 @@ img.avatar.avatar--lg{ width: var(--avatar-lg); height: var(--avatar-lg); }
   cursor:pointer;
   min-width:max(44px, var(--pm-heart-size, 28px));
   min-height:max(44px, var(--pm-heart-size, 28px));
-  padding:6px;
+  padding:0;
 }
 
 /* 조상에서 필터/블렌드로 죽는 이슈 무력화 */
