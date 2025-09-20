@@ -951,14 +951,24 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       window.addEventListener("visibilitychange", ()=>{ if (document.visibilityState === "hidden") flushPendingSave(); });
       window.addEventListener("beforeunload", flushPendingSave);
 
+      // saveState 개선
       function saveState() {
         if (!offscreen) return;
         try {
           const labelForPersist = resolveEffectiveLabel();
-          const dataURL = offscreen.toDataURL("image/png"); // alpha preserved
+          const payload = { zoom, scrollX, scrollY, tbPos, collapsed, w: offSize.w, h: offSize.h };
+
+          // 드로잉 완료 이벤트 이후에만 비트맵 포함
+          let includeBitmap = false;
+          try { includeBitmap = !!saveState._needBitmap; } catch {}
+          if (includeBitmap) {
+            payload.dataURL = offscreen.toDataURL("image/png");
+            saveState._needBitmap = false;
+          }
+
           localStorage.setItem(
             keyForPersist(labelForPersist),
-            JSON.stringify({ w: offSize.w, h: offSize.h, dataURL, zoom, scrollX, scrollY, tbPos, collapsed })
+            JSON.stringify(payload)
           );
         } catch {}
       }
@@ -1171,7 +1181,13 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
         if (grew && lastWorld){ const {x:lx, y:ly} = lastWorld; const prev = worldToOff(lx, ly); octx.beginPath(); octx.moveTo(prev.x, prev.y); }
         const {x:ox, y:oy} = worldToOff(wx, wy); octx.lineTo(ox, oy); octx.stroke(); lastWorld = { x:wx, y:wy }; requestRepaint();
       }
-      function endStroke(){ if (!isDrawing) return; offscreen.getContext("2d").closePath(); isDrawing = false; lastWorld = null; scheduleSave(); }
+      function endStroke(){
+        if (!isDrawing) return;
+        offscreen.getContext("2d").closePath();
+        isDrawing = false; lastWorld = null;
+        saveState._needBitmap = true; // 다음 saveState에서 비트맵 포함
+        scheduleSave();
+      }
 
       function onPointerDownCanvas(e){
         e.preventDefault();
@@ -1349,6 +1365,15 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
 
       async function onSaveToGallery(){
         const label = resolveEffectiveLabel();
+        if (!window.store?.addToGalleryFromCanvas) return;
+
+        let snap = null;
+        try { snap = exportViewportCanvas?.(); } catch {}
+        if (!snap || !(snap instanceof HTMLCanvasElement) || snap.width === 0 || snap.height === 0) {
+          snap = __mergeVisibleCanvases(document.getElementById("sdf-screen") || document);
+        }
+        if (!snap || snap.width === 0 || snap.height === 0) return; // 실제로 저장할 게 없으면 종료
+
         const canSave = window.store && typeof window.store.addToGalleryFromCanvas === "function";
         if (!canSave){ console.warn("[Save] store/addToGalleryFromCanvas 없음"); return; }
         const prevHTML = btnSave?.innerHTML; const prevDisabled = btnSave?.disabled;
@@ -1910,6 +1935,22 @@ function goMineAfterShare(label = getLabel()) {
 
     const fd = new FormData();
     const author = await getAuthorMeta().catch(()=>null);
+    // 1) Compose UI에서 값 읽기(없으면 기본값)
+    const framing = (() => {
+      // compose 모달에 컨트롤을 추가했다면 거기서 읽고,
+      // 아직 UI가 없다면 아래 기본값을 사용
+      const root = document.querySelector(".compose-crop") || document;
+      const fit   = (root.querySelector('[name="fit"]')?.value || "cover").trim();
+      const fxStr = root.querySelector('[name="focusX"]')?.value;
+      const fyStr = root.querySelector('[name="focusY"]')?.value;
+      const zmStr = root.querySelector('[name="zoom"]')?.value;
+
+      const focusX = Math.max(0, Math.min(100, Number(fxStr ?? 50)));
+      const focusY = Math.max(0, Math.min(100, Number(fyStr ?? 50)));
+      const zoom   = Math.max(1.0, Math.min(3.0, Number(zmStr ?? 1.0)));
+
+      return { fit, focusX, focusY, zoom };
+    })();
     if (author) appendAuthorFields(fd, author);
     fd.append("file", new File([blob], `${id}.png`, { type: "image/png" }));
     fd.append("id", id);
@@ -1917,6 +1958,14 @@ function goMineAfterShare(label = getLabel()) {
     fd.append("createdAt", String(now()));
     fd.append("ns", ns);
     fd.append("visibility", "public");
+
+    // 2) 서버 호환을 위해 단일 필드와 JSON 두 가지로 모두 전송(백엔드별 호환성↑)
+    fd.append("fit", framing.fit);
+    fd.append("focusX", String(framing.focusX));
+    fd.append("focusY", String(framing.focusY));
+    fd.append("zoom",   String(framing.zoom));
+    fd.append("crop", JSON.stringify(framing)); // 여분(백엔드가 JSON 하나만 읽어도 동작)
+
     if (width)  fd.append("width",  String(width));
     if (height) fd.append("height", String(height));
     if (csrf)   fd.append("_csrf",  csrf);
@@ -2688,39 +2737,63 @@ function goMineAfterShare(label = getLabel()) {
 
   // ─────────────────────────────────────────────────────────────
   // 6) Mount Post Button (액션바 + POST 버튼)
-  //    - CSS 클래스 위임. JS에서 레이아웃 인라인 지정하지 않음.
   // ─────────────────────────────────────────────────────────────
   function mountPostButton(){
     const wrap = document.getElementById('sdf-wrap');
-    const drawWrap = document.querySelector('.labelmine-draw-wrap') || wrap?.parentElement || document.querySelector('main.labelmine-body') || document.body;
-    if (!wrap || !drawWrap) return;
+    if (!wrap) return;
 
-    let bar = drawWrap.querySelector('.sdf-actionbar');
+    // 액션바 호스트 보장
+    let bar = document.getElementById('sdf-actionbar');
     if (!bar) {
       bar = document.createElement('div');
-      bar.className = 'sdf-actionbar';
-      drawWrap.insertBefore(bar, wrap);
+      bar.id = 'sdf-actionbar';
+      bar.className = 'feed-actionbar';
+      wrap.appendChild(bar);
     }
 
+    // Post 버튼 생성/재사용
     let btn = document.getElementById('feed-open-btn');
     if (!btn) {
       btn = document.createElement('button');
       btn.id = 'feed-open-btn';
       btn.type = 'button';
       btn.className = 'feed-open-btn';
-      btn.textContent = 'POST';
-    } else {
-      btn.classList.add('feed-open-btn');
-      btn.classList.remove('feed-open-btn--bottom');
+      btn.title = '새 글 작성';
+      btn.setAttribute('aria-label', '새 글 작성');
+      btn.textContent = 'Post';
+      bar.appendChild(btn);
     }
 
-    if (!btn.dataset.bound) {
-      btn.addEventListener('click', openFeedModal);
-      btn.dataset.bound = '1';
-      btn.setAttribute('aria-label', '새 게시물 만들기');
+    // 중복 바인딩 방지
+    if (!btn.dataset.bind) {
+      btn.addEventListener('click', (e)=>{
+        e.preventDefault();
+        try {
+          const label = (typeof getLabel === 'function') ? getLabel() : (window.OK?.[0] || 'default');
+          const items = (window.store?.getGallery?.(label)) || [];
+          // 갤러리에 항목이 있으면 3단계, 없으면 1단계
+          if (Array.isArray(items) && items.length > 0) {
+            runThreeStepFlow();
+          } else {
+            openFeedModal();
+          }
+        } catch {
+          openFeedModal();
+        }
+      }, { capture: true });
+      btn.dataset.bind = '1';
     }
-    if (btn.parentElement !== bar) bar.appendChild(btn);
+
+    // 3단계 후킹(중복 호출 안전)
+    if (typeof hookPostButtonForThreeStep === 'function') {
+      hookPostButtonForThreeStep();
+    }
   }
+
+  // 준비 후 장착
+  ensureReady(() => {
+    try { mountPostButton(); } catch {}
+  });
 
   // ─────────────────────────────────────────────────────────────
   // 7) Bootstrap
