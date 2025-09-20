@@ -866,19 +866,7 @@
   }[m]));
 
   // 카드 마크업(댓글 표시 제거)
-  
-  // === [ADD] view meta → inline style helper ===
-  function styleFromView(item){
-    try {
-      const mode = String(item.view_mode || item?.view?.mode || "").toLowerCase();
-      const fit  = (mode === "contain") ? "contain" : "cover";
-      const z  = Math.max(0.2, Math.min(8, Number(item.view_zoom ?? item?.view?.zoom ?? 1)));
-      const vx = Math.max(-100, Math.min(100, Number(item.view_x ?? item?.view?.x ?? 0)));
-      const vy = Math.max(-100, Math.min(100, Number(item.view_y ?? item?.view?.y ?? 0)));
-      return `object-fit:${fit};transform:translate(${vx}%, ${vy}%) scale(${z});transform-origin:center center;will-change:transform;`;
-    } catch { return ""; }
-  }
-function cardHTML(item) {
+  function cardHTML(item) {
     const liked = !!item.liked;
     const likes = Number(item.likes || 0);
     const safeLabel = (item.label || '').replace(/[^\w-]+/g, '');
@@ -889,7 +877,7 @@ function cardHTML(item) {
     return `
     <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
       <div class="media">
-        <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" style="${styleFromView(item)}" />
+        <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
         <div class="hover-ui" role="group" aria-label="Post actions">
           <div class="actions">
             <div class="stat" data-like-readonly>
@@ -2487,7 +2475,7 @@ function cardHTML(item) {
         <div class="pm-layout">
           <div class="pm-left">
             <div class="media">
-              <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" style="${styleFromView(item)}" />
+              <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
             </div>
           </div>
 
