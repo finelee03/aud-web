@@ -1808,6 +1808,7 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
   });
 
   function getNS(){ return (localStorage.getItem("auth:userns") || "default").trim().toLowerCase(); }
+  window.getNS = getNS;
   function getLabel(){
     try{
       if (typeof window.readSelected === "function"){
@@ -2690,11 +2691,7 @@ function goMineAfterShare(label = getLabel()) {
   // ─────────────────────────────────────────────────────────────
   function mountPostButton(){
     const wrap = document.getElementById('sdf-wrap');
-    const drawWrap =
-      document.querySelector('.labelmine-draw-wrap') ||
-      wrap?.parentElement ||
-      document.querySelector('main.labelmine-body') ||
-      document.body;
+    const drawWrap = document.querySelector('.labelmine-draw-wrap') || wrap?.parentElement || document.querySelector('main.labelmine-body') || document.body;
     if (!wrap || !drawWrap) return;
 
     let bar = drawWrap.querySelector('.sdf-actionbar');
@@ -2710,25 +2707,19 @@ function goMineAfterShare(label = getLabel()) {
       btn.id = 'feed-open-btn';
       btn.type = 'button';
       btn.className = 'feed-open-btn';
-      btn.textContent = 'Post';
-      bar.appendChild(btn);
+      btn.textContent = 'POST';
+    } else {
+      btn.classList.add('feed-open-btn');
+      btn.classList.remove('feed-open-btn--bottom');
     }
 
-    // 기본(1-스텝) 동작
-    btn.addEventListener('click', (e) => {
-      // 3-스텝 후킹이 있으면 그쪽이 가로챕니다 (hookPostButtonForThreeStep에서 capture 리스너로 처리)
-      if (typeof window.openFeedModal === 'function') {
-        e.preventDefault();
-        window.openFeedModal();
-      }
-    }, { passive: false });
-
-    // 3-스텝 가로채기(갤러리에 아이템 있을 때)
-    hookPostButtonForThreeStep();
+    if (!btn.dataset.bound) {
+      btn.addEventListener('click', openFeedModal);
+      btn.dataset.bound = '1';
+      btn.setAttribute('aria-label', '새 게시물 만들기');
+    }
+    if (btn.parentElement !== bar) bar.appendChild(btn);
   }
-
-  // 부팅 시 장착
-  ensureReady(mountPostButton);
 
   // ─────────────────────────────────────────────────────────────
   // 7) Bootstrap
