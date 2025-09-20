@@ -1058,8 +1058,8 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
 
         // 휠 줌
         if (evt.ctrlKey || evt.metaKey || evt.deltaZ){
-          const dy     = (SDF?.Utils?.wheelDeltaPx ? SDF.Utils.wheelDeltaPx(evt) : evt.deltaY);
-          const factor = Math.exp(-dy * (DEFAULTS.wheelZoomCoeff || 0.004));
+          const dy = (SDF?.Utils?.wheelDeltaPx ? SDF.Utils.wheelDeltaPx(evt) : evt.deltaY);
+          const factor = Math.exp(-(DEFAULTS.wheelZoomCoeff || 0.004) * dy);
           const target = zoom * factor;
           const { sx, sy } = getZoomAnchorScreenPt();
           zoomAbout(target, sx, sy);
@@ -1163,53 +1163,58 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       const worldToLocal = (wx,wy) => ({ x: (wx - scrollX) * zoom, y: (wy - scrollY) * zoom });
       const worldToOff   = (wx,wy) => ({ x: wx + offSize.w/2, y: wy + offSize.h/2 });
 
-      // ===== [NEW] 스크린<->월드 변환(줌 기준 고정용) + 기준점 계산 + 공통 줌 적용 =====
+      // ===== [REWRITE] 줌 기준: 600x600 모달(그림 칸) 중앙 고정 =====
+      // 스크린<->월드 변환
       function screenToWorld(sx, sy){
-        // sx, sy는 #sdf-screen 좌상단 기준 스크린 좌표(px)
+        // #sdf-screen 기준 스크린 좌표(px) → 월드 좌표
         return { x: (sx + scrollX) / zoom, y: (sy + scrollY) / zoom };
       }
       function worldToScreen(wx, wy){
         return { x: wx * zoom - scrollX, y: wy * zoom - scrollY };
       }
 
-      /** 600x600 그림칸(프리뷰) 중앙의 스크린 좌표 반환
-       * 우선순위: .fc-preview → .im-stage → #sdf-wrap → #sdf-screen
-       */
+      // 고정 기준 컨테이너 선택자(우선순위: 크롭/피드 미리보기 → 이미지 스테이지 → 래퍼 → 스크린)
+      // 필요 시 여기에 600x600 칸의 실제 클래스명을 추가하면 됩니다.
+      const ZOOM_STAGE_SELECTOR = '.cm-stage, .cmodal .cm-stage, .fc-preview, .im-stage, #sdf-wrap';
+
+      // 600x600 그림칸(모달)의 "시각적 중앙"을 #sdf-screen 로컬좌표로 환산
       function getZoomAnchorScreenPt(){
-        const stageCand = document.querySelector('.fc-preview, .im-stage, #sdf-wrap') || screen;
-        const rStage    = screen.getBoundingClientRect();
-        const r         = stageCand.getBoundingClientRect();
-        const cx = r.left + r.width  / 2;
-        const cy = r.top  + r.height / 2;
-        // #sdf-screen 기준 로컬 스크린 좌표
-        return { sx: cx - rStage.left, sy: cy - rStage.top };
+        // 기준 스테이지 후보
+        const stageCand = document.querySelector(ZOOM_STAGE_SELECTOR) || screen;
+        // 기준은 시각적으로 보이는 박스의 정중앙
+        const rStage = stageCand.getBoundingClientRect();
+        const rScreen = screen.getBoundingClientRect();
+        const cx = rStage.left + rStage.width  / 2;
+        const cy = rStage.top  + rStage.height / 2;
+        // #sdf-screen 좌표계로 변환
+        return { sx: cx - rScreen.left, sy: cy - rScreen.top };
       }
 
-      /** 지정한 스크린 지점(anchor)을 고정한 채로 줌값을 바꾸고 scroll 보정 */
+      /** 공통: anchor 스크린 점을 고정한 채로 targetZoom으로 변경 */
       function zoomAbout(targetZoom, anchorSx, anchorSy){
         const minZ = DEFAULTS.minZoom, maxZ = DEFAULTS.maxZoom;
         const newZ = clamp(targetZoom, minZ, maxZ);
 
-        // 앵커가 가리키던 월드 포인트를 기록
+        // 앵커가 가리키던 월드 포인트(줌 전)
         const before = screenToWorld(anchorSx, anchorSy);
 
-        // 줌 반영
+        // 확대/축소 반영
         zoom = newZ;
 
-        // 같은 월드 포인트가 같은 스크린 좌표에 남도록 scroll 보정
+        // 같은 월드 포인트가 같은 스크린 위치에 남도록 scroll 보정
         scrollX = before.x * zoom - anchorSx;
         scrollY = before.y * zoom - anchorSy;
 
-        // 저장/리페인트
         scheduleSaveIdle(160);
         requestRepaint();
+        requestUpdateCursor?.();
       }
 
-      /** 키보드용 한 단계 줌 (dir: +1 확대, -1 축소) */
+      /** 키보드 한 단계 줌(+1 확대, -1 축소). 기준은 항상 모달 중앙 */
       function zoomStep(dir){
-        const step = DEFAULTS.keyZoomStep || 1.5;
-        const mul  = (dir > 0) ? step : (1 / step);
-        const target = zoom * mul;
+        const step   = DEFAULTS.keyZoomStep || 1.5;
+        const factor = dir > 0 ? step : (1 / step);
+        const target = zoom * factor;
         const { sx, sy } = getZoomAnchorScreenPt();
         zoomAbout(target, sx, sy);
       }
