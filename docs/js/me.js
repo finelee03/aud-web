@@ -718,13 +718,17 @@
       Object.defineProperty(socket, "__meHandlersAttached", { value: true, enumerable: false });
 
       socket.on("connect", () => {
-        if (MY_ITEM_IDS.size) socket.emit("subscribe", { items: [...MY_ITEM_IDS] });
+        const watch = (localStorage.getItem("me:watched-ns") || "[]");
+        const payload = { items: [...MY_ITEM_IDS], ns: getNS() };
+        try { payload.watch = JSON.parse(watch); } catch {}
+        socket.emit("subscribe", payload);
       });
 
       // ── 알림 리스너들
       socket.on("item:like", (p) => {
         if (!isNotifyOn() || !p || !p.id) return;
-        if (!MY_ITEM_IDS.has(String(p.id))) return;
+        const mineOrWatched = isMineOrWatchedFromPayload(p);
+        if (!(MY_ITEM_IDS.has(String(p.id)) || mineOrWatched)) return;
         if (MY_UID && String(p.by) === String(MY_UID)) return;
         if (p.liked) {
           const likes = Number(p.likes || 0);
@@ -734,7 +738,8 @@
 
       socket.on("comment:like", (p) => {
         if (!isNotifyOn() || !p || !p.id) return;
-        if (!MY_ITEM_IDS.has(String(p.id))) return;
+        const mineOrWatched = isMineOrWatchedFromPayload(p);
+        if (!(MY_ITEM_IDS.has(String(p.id)) || mineOrWatched)) return;
         if (MY_UID && String(p.by) === String(MY_UID)) return;
         if (p.liked) {
           const likes = Number(p.likes || 0);
@@ -747,7 +752,8 @@
 
       socket.on("vote:update", (p) => {
         if (!isNotifyOn() || !p || !p.id) return;
-        if (!MY_ITEM_IDS.has(String(p.id))) return;
+        const mineOrWatched = isMineOrWatchedFromPayload(p);
+        if (!(MY_ITEM_IDS.has(String(p.id)) || mineOrWatched)) return;
 
         try {
           const entries = Object.entries(p.counts || {});
