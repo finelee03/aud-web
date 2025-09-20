@@ -1538,7 +1538,7 @@
   // 상세 조회로 user 정보가 비어있을 때 한 번만 보강
   async function ensureAuthorInfo(item) {
     if (!item) return item;
-    if (mineFlagOf(item) !== null || isMine(item)) return item;
+    if (mineFlagOf(item) === true || isMine(item)) return item;
 
     try {
       const ns = nsOf(item);
