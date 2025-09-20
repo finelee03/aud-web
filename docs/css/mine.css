@@ -696,7 +696,7 @@ img.avatar.avatar--lg{ width: var(--avatar-lg); height: var(--avatar-lg); }
 .post-modal--split .sticky-foot{ flex:0 0 auto; position:static; display:grid; gap:8px; padding:10px 0; background:#fff; border-top:none; }
 .post-modal--split .sticky-foot .actions{ display:flex; align-items:center; gap:8px; justify-content:flex-start; }
 .post-modal--split .sticky-foot .actions .btn-like,
-.post-modal--split .sticky-foot .actions .btn-comments{ appearance:none; border:0; background:transparent; color:#111; padding:2px; border-radius:8px; cursor:pointer; }
+.post-modal--split .sticky-foot .actions .btn-comments{ appearance:none; border:0; background:transparent; color:#111; padding:0; border-radius:8px; cursor:pointer; }
 .post-modal--split .sticky-foot .actions svg{ width:24px; height:24px; display:inline-block; }
 .post-modal--split .sticky-foot .actions [data-like-count],
 .post-modal--split .sticky-foot .actions [data-cmt-count]{ display:none !important; }

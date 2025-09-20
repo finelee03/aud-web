@@ -721,7 +721,7 @@
     const add = (r) => { try { sheet.insertRule(r, sheet.cssRules.length); } catch {} };
 
     add(`.btn-like .ico-heart{ display:none !important; }`);
-    add(`.sticky-foot .btn-like{ min-width:max(44px,28px); min-height:max(44px,28px); padding:6px; line-height:0; -webkit-tap-highlight-color:transparent; }`);
+    add(`.sticky-foot .btn-like{ min-width:max(44px,28px); min-height:max(44px,28px); padding:0; line-height:0; -webkit-tap-highlight-color:transparent; }`);
     add(`.sticky-foot .btn-like svg{ width:28px !important; height:28px !important; display:block; }`);
     add(`.sticky-foot .btn-like svg path, .feed-card .hover-ui .stat svg path{
       transition: fill .15s, stroke .15s;
