@@ -1786,6 +1786,8 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
     fd.append("author", JSON.stringify(a));   // 혹시 author만 읽는 서버 대비
   }
 
+  
+
 /* ========================================================================== *
  * FEED — Unified Post Flow (No-inline-CSS, DRY)
  * - 공통 유틸/뷰를 한 번만 정의하고 1-STEP / 3-STEP이 함께 사용
@@ -1797,6 +1799,155 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
   // ─────────────────────────────────────────────────────────────
   // 0) Namespace & Small Utilities (공통)
   // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // ZoomPane (display-only transform)
+  // ─────────────────────────────────────────────────────────────
+  function makeZoomPane({ host, target, min=0.5, max=5, step=1.2 }) {
+    // host: 스크롤/이벤트 받는 컨테이너(예: stage), target: 변환 적용할 IMG
+    if (!host || !target) return { destroy:()=>{} };
+
+    let scale = 1, tx = 0, ty = 0;
+    let dragging = false, lastX = 0, lastY = 0;
+
+    host.style.touchAction = "none";     // 핀치/팬 제스처 충돌 방지
+    host.style.overflow = "hidden";
+    host.style.position = host.style.position || "relative";
+    target.style.transformOrigin = "0 0";
+    target.style.willChange = "transform";
+    target.draggable = false;
+
+    function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+    function apply(){ target.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; }
+
+    function hostRect(){ return host.getBoundingClientRect(); }
+    function imgSize(){ return { w: target.naturalWidth || target.width, h: target.naturalHeight || target.height }; }
+
+    function fit(){ // 이미지가 호스트에 최대한 들어오도록
+      const r = hostRect(), s = imgSize();
+      if (!s.w || !s.h) return;
+      const sx = r.width  / s.w;
+      const sy = r.height / s.h;
+      scale = Math.max(min, Math.min(max, Math.min(sx, sy)));
+      // 중앙 정렬
+      tx = Math.round((r.width  - s.w * scale)/2);
+      ty = Math.round((r.height - s.h * scale)/2);
+      apply();
+    }
+
+    function oneToOne(){
+      const r = hostRect(), s = imgSize();
+      scale = 1;
+      tx = Math.round((r.width  - s.w)/2);
+      ty = Math.round((r.height - s.h)/2);
+      apply();
+    }
+
+    function zoomAt(px, py, factor){
+      const next = clamp(scale * factor, min, max);
+      if (next === scale) return;
+      // 고정점(px,py)을 기준으로 줌 → 평행이동 보정
+      const ox = (px - tx) / scale;
+      const oy = (py - ty) / scale;
+      scale = next;
+      tx = Math.round(px - ox * scale);
+      ty = Math.round(py - oy * scale);
+      apply();
+    }
+
+    // 휠: Ctrl/Meta 있으면 줌, 아니면 팬
+    const onWheel = (e)=>{
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const f = Math.exp(-(e.deltaY || 0) * 0.0025);
+        const rect = host.getBoundingClientRect();
+        zoomAt(e.clientX - rect.left, e.clientY - rect.top, f);
+      } else {
+        tx -= e.deltaX || 0;
+        ty -= e.deltaY || 0;
+        apply();
+      }
+    };
+
+    // 포인터 드래그로 팬
+    const onPointerDown = (e)=>{
+      dragging = true; lastX = e.clientX; lastY = e.clientY;
+      host.setPointerCapture(e.pointerId);
+    };
+    const onPointerMove = (e)=>{
+      if (!dragging) return;
+      const dx = e.clientX - lastX, dy = e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      tx += dx; ty += dy;
+      apply();
+    };
+    const onPointerUp = (e)=>{
+      dragging = false;
+      try { host.releasePointerCapture(e.pointerId); } catch {}
+    };
+
+    // 더블클릭: 확대(Shift면 축소)
+    const onDbl = (e)=>{
+      const rect = host.getBoundingClientRect();
+      zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.shiftKey ? 1/step : step);
+    };
+
+    // 키보드: + / - / 0
+    const onKey = (e)=>{
+      if (!host.contains(document.activeElement) && document.activeElement?.tagName !== "BODY") return;
+      const k = e.key.toLowerCase();
+      if ((k==='+' || k==='=')) { const r=hostRect(); zoomAt(r.width/2, r.height/2, step); }
+      if (k==='-') { const r=hostRect(); zoomAt(r.width/2, r.height/2, 1/step); }
+      if (k==='0') { fit(); }
+    };
+
+    // 컨트롤 버튼(우상단)
+    const ui = document.createElement('div');
+    ui.className = 'zp-controls';
+    ui.innerHTML = `
+      <button type="button" class="zp-btn" data-act="minus"   aria-label="Zoom out">−</button>
+      <button type="button" class="zp-btn" data-act="plus"    aria-label="Zoom in">＋</button>
+      <button type="button" class="zp-btn" data-act="fit"     aria-label="Fit">Fit</button>
+      <button type="button" class="zp-btn" data-act="one"     aria-label="1:1">1:1</button>
+    `;
+    host.appendChild(ui);
+    ui.addEventListener('click', (e)=>{
+      const b = e.target.closest('.zp-btn'); if (!b) return;
+      const act = b.dataset.act; const r = hostRect();
+      if (act==='plus')  zoomAt(r.width/2, r.height/2, step);
+      if (act==='minus') zoomAt(r.width/2, r.height/2, 1/step);
+      if (act==='fit')   fit();
+      if (act==='one')   oneToOne();
+    });
+
+    host.addEventListener('wheel', onWheel, { passive:false });
+    host.addEventListener('pointerdown', onPointerDown);
+    host.addEventListener('pointermove', onPointerMove);
+    ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(t=> host.addEventListener(t, onPointerUp));
+    host.addEventListener('dblclick', onDbl);
+    window.addEventListener('keydown', onKey);
+
+    // 이미지 로드 후 초기 배치
+    if (target.complete) fit();
+    else target.addEventListener('load', fit, { once:true });
+
+    return {
+      fit, oneToOne,
+      destroy(){
+        try {
+          host.removeEventListener('wheel', onWheel);
+          host.removeEventListener('pointerdown', onPointerDown);
+          host.removeEventListener('pointermove', onPointerMove);
+          ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(t=> host.removeEventListener(t, onPointerUp));
+          host.removeEventListener('dblclick', onDbl);
+          window.removeEventListener('keydown', onKey);
+          ui.remove();
+          target.style.transform = '';
+          target.style.willChange = '';
+        } catch {}
+      }
+    };
+  }
+
   const SDF   = window.SDF || (window.SDF = {});
   const U     = SDF.Utils || {};
   const Icons = SDF.Icons || {};
@@ -1882,56 +2033,31 @@ function goMineAfterShare(label = getLabel()) {
 
   // [CHANGE] FeedUnified.uploadPost 내부, fd.append 전에 넣기
   async function uploadPost({ blob, text, width, height, bg }) {
-  // 선택: 레이아웃 지정 (정사각 + 배경 + 줌)
-  // 호출부에서 { layout:{ size?:number, zoom:number, bg?:string } }를 넘기면
-  // 해당 배율로 여백을 반영해 합성한다.
-    const __layout = arguments[0]?.layout || null;
     const label = getLabel();
     const ns    = getNS();
     const csrf  = await ensureCSRF();
     const id    = `g_${now()}`;
-  // 🔴 업로드용 블랍을 표준화 (+옵션: 줌/여백 반영)
-  try {
-    const img = await blobToImage(blob);
-    if (__layout && typeof __layout.zoom === 'number') {
-      // 여백 제어 모드: 정사각 캔버스에 배경 + 배율 적용
-      const side = Math.max(
-        1024,
-        Math.min(2048, __layout.size || Math.max(img.naturalWidth, img.naturalHeight))
-      );
+
+    // 🔴 업로드용 블랍을 표준화
+    try {
+      // blob → Image → temp canvas
+      const img = await blobToImage(blob);
       const c = document.createElement('canvas');
-      c.width = c.height = side;
-      const ctx = c.getContext('2d', { alpha: true });
-      // 배경
-      const bgHex = (typeof __layout.bg === 'string' && __layout.bg) ? __layout.bg : (bg || '#FFFFFF');
-      if (bgHex) { ctx.fillStyle = bgHex; ctx.fillRect(0,0,side,side); }
-      // 원본을 정사각 내부에 "맞춤"한 뒤, zoom 배율 적용 (zoom<1 → 여백↑, zoom>1 → 여백↓/클립)
-      const fit = Math.min(side / img.naturalWidth, side / img.naturalHeight);
-      const scale = fit * Math.max(0.1, Math.min(__layout.zoom, 8)); // 안전 클램프
-      const dw = Math.round(img.naturalWidth  * scale);
-      const dh = Math.round(img.naturalHeight * scale);
-      const dx = Math.round((side - dw) / 2);
-      const dy = Math.round((side - dh) / 2);
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, dx, dy, dw, dh);
-      blob   = await SDF.Utils.canvasToBlob(c, 'image/png');
-      width  = side;
-      height = side;
-    } else {
-      // 기존: 내용 트림 + 정사각 패딩(0.08)
-      const src = document.createElement('canvas');
-      src.width = img.naturalWidth; src.height = img.naturalHeight;
-      src.getContext('2d').drawImage(img,0,0);
-      const target = Math.max(1024, Math.min(2048, Math.max(src.width, src.height)));
-      const norm = SDF.Utils.trimAndPadToSquare(src, { padding: 0.08, size: target });
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+
+      // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
+      const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
+      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0.08, size: target });
+
+      // 캔버스 → Blob
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
       width  = norm.width;
       height = norm.height;
+    } catch (e) {
+      // 실패해도 그냥 원본으로 진행
+      console.warn('[upload] normalize skipped:', e);
     }
-  } catch (e) {
-    console.warn('[upload] normalize skipped:', e);
-  }
-  
 
     const fd = new FormData();
     const author = await getAuthorMeta().catch(()=>null);
@@ -2303,7 +2429,13 @@ function goMineAfterShare(label = getLabel()) {
       const left  = document.createElement("div"); left.className = "im-left";
       const stage = document.createElement("div"); stage.className = "im-stage has-image";
       const img   = document.createElement("img"); img.src = url; img.alt = "";
+      let zp = null;
       stage.append(img); left.append(stage);
+
+      img.addEventListener("load", () => {
+        zp = makeZoomPane({ host: stage, target: img, min: 0.5, max: 6, step: 1.25 });
+        zp.fit();
+      }, { once: true });
 
       const right = document.createElement("div"); right.className = "im-right";
       const acct  = document.createElement("div"); acct.className  = "im-acct";
@@ -2335,43 +2467,11 @@ function goMineAfterShare(label = getLabel()) {
 
       // 배경색(공통 컬러 피커 사용)
       let bgHex = '#FFFFFF';
-
-      // ── 줌 컨트롤 UI 먼저 생성
-      const zoomWrap = document.createElement("div");
-      zoomWrap.className = "im-zoom";
-      const btnOut = document.createElement("button"); btnOut.type="button"; btnOut.className="im-zoom-btn"; btnOut.textContent="–";
-      const btnIn  = document.createElement("button");  btnIn.type="button";  btnIn.className="im-zoom-btn"; btnIn.textContent="+";
-      const zRead  = document.createElement("span");    zRead.className="im-zoom-readout"; zRead.textContent="100%";
-      zoomWrap.append(btnOut, zRead, btnIn);
-
-      // 줌 상태/로직
-      let zoom = 1.0;
-      const Z_MIN = 0.25, Z_MAX = 4, Z_STEP = 1.1;
-      function setZoom(next){
-        zoom = Math.max(Z_MIN, Math.min(Z_MAX, next));
-        zRead.textContent = Math.round(zoom*100) + '%';
-        // 미리보기는 CSS 변환만 (업로드 때 실제 합성)
-        img.style.transform = `translate(-50%,-50%) scale(${zoom})`;
-        img.style.transformOrigin = '50% 50%';
-      }
-      setZoom(1.0);
-
-      btnIn.addEventListener('click',  ()=> setZoom(zoom * Z_STEP));
-      btnOut.addEventListener('click', ()=> setZoom(zoom / Z_STEP));
-      // 휠로도 조절 (Ctrl/⌘ 없이)
-      stage.addEventListener('wheel', (e)=>{
-        if (e.ctrlKey || e.metaKey) return;
-        e.preventDefault();
-        setZoom(zoom * (e.deltaY > 0 ? 1 / Z_STEP : Z_STEP));
-      }, { passive:false });
-
-      // 컬러 피커
       const applyBg = (c) => { left.style.background = c; stage.style.background = c; bgHex = c; };
       const picker = buildColorPicker({ onChange: (hex) => applyBg(hex) });
       applyBg('#FFFFFF');
 
-      // 우측 패널 조립 (중복 없이 한 번만 append)
-      right.append(acct, caption, meta, picker.el, zoomWrap);
+      right.append(acct, caption, meta, picker.el);
       body.append(left, right);
       shell.append(head, body);
       back.append(shell);
@@ -2389,6 +2489,7 @@ function goMineAfterShare(label = getLabel()) {
 
       function cleanup(){
         URL.revokeObjectURL(url);
+        if (zp) { zp.destroy(); zp = null; } // ← 추가
         window.removeEventListener("keydown", onEsc);
         back.remove();
       }
@@ -2406,14 +2507,7 @@ function goMineAfterShare(label = getLabel()) {
         share.textContent = "Sharing…";
         try {
           if (!await requireLoginOrRedirect()) return;
-          await uploadPost({
-            blob,
-            text: caption.value,
-            width: w,
-            height: h,
-            bg: bgHex,
-            layout: { zoom, bg: bgHex, size: Math.max(1024, Math.min(2048, Math.max(w||1024, h||1024))) }
-          });
+          await uploadPost({ blob, text: caption.value, width: w, height: h, bg: bgHex });
           // ✅ 업로드 성공 → mine으로 이동
           goMineAfterShare();
           return; // 네비게이션 트리거 이후 아래 코드는 사실상 실행되지 않음
@@ -2457,6 +2551,7 @@ function goMineAfterShare(label = getLabel()) {
     const stageImg = document.createElement("img");
     stage.append(dummy, chooser, stageImg);
     left.append(stage);
+    let zp = null;
 
     const right = document.createElement("div"); right.className = "im-right";
     const acct  = document.createElement("div"); acct.className  = "im-acct";
@@ -2477,31 +2572,12 @@ function goMineAfterShare(label = getLabel()) {
 
     // 배경색
     let bgHex = '#FFFFFF';
-    let zoom = 1.0; const Z_MIN=0.25, Z_MAX=4, Z_STEP=1.1;
-    function setZoom(next){
-      zoom = Math.max(Z_MIN, Math.min(Z_MAX, next));
-      if (stageImg && stage.classList.contains('has-image')) {
-        stageImg.style.transform = `translate(-50%,-50%) scale(${zoom})`;
-        stageImg.style.transformOrigin = '50% 50%';
-      }
-      zRead.textContent = Math.round(zoom*100) + '%';
-    }
     const applyBg = (c) => { left.style.background = c; stage.style.background = c; bgHex = c; };
     const picker  = buildColorPicker({ onChange: (hex)=> applyBg(hex) });
     applyBg('#FFFFFF');
 
-    right.append(acct, caption, meta, attach, picker.el);    
-    // 줌 컨트롤
-    const zoomWrap = document.createElement('div'); zoomWrap.className = 'im-zoom';
-    const btnOut = document.createElement('button'); btnOut.type='button'; btnOut.className='im-zoom-btn'; btnOut.textContent='–';
-    const btnIn  = document.createElement('button'); btnIn.type='button';  btnIn.className='im-zoom-btn'; btnIn.textContent='+';
-    const zRead  = document.createElement('span');  zRead.className='im-zoom-readout'; zRead.textContent='100%';
-    zoomWrap.append(btnOut, zRead, btnIn);
-    right.append(acct, caption, meta, attach, picker.el, zoomWrap);
-    setZoom(1.0);
-    btnIn.addEventListener('click',  ()=> setZoom(zoom*Z_STEP));
-    btnOut.addEventListener('click', ()=> setZoom(zoom/Z_STEP));
-    stage.addEventListener('wheel', (e)=>{ if(e.ctrlKey||e.metaKey) return; e.preventDefault(); setZoom(zoom * (e.deltaY>0 ? 1/Z_STEP : Z_STEP)); }, { passive:false });
+    right.append(acct, caption, meta, attach, picker.el);
+
     // 글로벌 닫기
     const globalClose = document.createElement("button");
     globalClose.className = "im-head-close";
@@ -2520,11 +2596,17 @@ function goMineAfterShare(label = getLabel()) {
 
     function applySelection(b, w, h){
       state.blob = b; state.w = w|0; state.h = h|0;
+      if (zp) { zp.destroy(); zp = null; }
       if (b){
         const url = URL.createObjectURL(b);
         stageImg.src = url;
         stage.classList.add("has-image");
-        stageImg.addEventListener("load", ()=> URL.revokeObjectURL(url), { once:true });
+        stageImg.addEventListener("load", ()=>{
+          // [ADD] 새로 장착
+          zp = makeZoomPane({ host: stage, target: stageImg, min: 0.5, max: 6, step: 1.25 });
+          zp.fit();
+          URL.revokeObjectURL(url);
+        }, { once:true });
         share.disabled = false;
       } else {
         stageImg.removeAttribute("src");
@@ -2535,6 +2617,7 @@ function goMineAfterShare(label = getLabel()) {
 
     function closeAndReset(){
       caption.value = ""; mR.textContent = "0 / 300";
+      if (zp) { zp.destroy(); zp = null; }  // [ADD]
       applySelection(null,0,0);
       back.remove();
       document.body.classList.remove("is-compose");
@@ -2572,8 +2655,7 @@ function goMineAfterShare(label = getLabel()) {
           text: caption.value,
           width: state.w,
           height: state.h,
-          bg: bgHex,
-          layout: { zoom, bg: bgHex, size: Math.max(1024, Math.min(2048, Math.max(state.w||1024, state.h||1024))) }
+          bg: bgHex
         });
         // ✅ 업로드 성공 → mine으로 이동
         goMineAfterShare();
@@ -2809,18 +2891,24 @@ function goMineAfterShare(label = getLabel()) {
   // ─────────────────────────────────────────────────────────────
   // 7) Bootstrap
   // ─────────────────────────────────────────────────────────────
-  ensureReady(()=>{
-    mountPostButton();
-    hookPostButtonForThreeStep();
+  ensureReady(() => {
+    try {
+      // 1) 상단 액션바에 POST 버튼 장착 (없으면 생성)
+      mountPostButton();
 
-    // 접근성 id/name 보정 (동적 DOM에서도 보정)
-    function patchA11yIds(){
-      document.querySelectorAll('textarea.im-caption').forEach((el,i)=>{ if (!el.id) el.id = i ? `im-caption-${i}` : "im-caption"; if (!el.name) el.name = "caption"; });
-      document.querySelectorAll('input.feedc__file').forEach((el,i)=>{ if (!el.id) el.id = i ? `feedc__file-${i}` : "feedc__file"; if (!el.name) el.name = "file"; });
+      // 2) 갤러리가 비어있지 않을 때는 3-스텝(Gallery→Crop→Compose)로 열리도록 버튼 훅
+      hookPostButtonForThreeStep();
+
+      // 3) 디버깅/수동 호출용(옵션): 필요 없으면 아래 두 줄 삭제해도 됨
+      if (typeof window.openFeedModal !== "function") {
+        window.openFeedModal = openFeedModal;
+      }
+      window.runThreeStepFlow = runThreeStepFlow;
+    } catch (e) {
+      console.error("[FeedUnified/bootstrap] init failed:", e);
     }
-    patchA11yIds();
-    new MutationObserver(()=>patchA11yIds()).observe(document.documentElement, { childList:true, subtree:true });
   });
+})();
 
   // 필요 시 외부에서 직접 호출할 수 있게 노출
   SDF.Feed = Object.assign(SDF.Feed || {}, {
@@ -2831,7 +2919,6 @@ function goMineAfterShare(label = getLabel()) {
     runThreeStepFlow,
     mountPostButton,
   });
-})();
 
 
 // 만료(401) 즉시 전환
@@ -2839,3 +2926,4 @@ window.addEventListener("auth:logout", ()=>{
   const ret = encodeURIComponent(location.href);
   location.replace(`${pageHref('login.html')}?next=${ret}`);
 });
+
