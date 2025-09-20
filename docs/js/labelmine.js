@@ -1751,7 +1751,9 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       u?.handle ?? u?.username ?? u?.login ?? u?.profile?.handle ?? "";
     const avatar =
       u?.avatar_url ?? u?.avatar ?? u?.picture ?? u?.profile?.avatarUrl ?? "";
-    const ns = getNS();
+    const ns =
+      (window.SDF_NS ||
+       (localStorage.getItem("auth:userns") || "default")).trim().toLowerCase();
     return { id: id && String(id), ns, name: String(name||""), handle: String(handle||""), avatar: String(avatar||"") };
   }
 
@@ -1808,7 +1810,6 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
   });
 
   function getNS(){ return (localStorage.getItem("auth:userns") || "default").trim().toLowerCase(); }
-  window.getNS = getNS;
   function getLabel(){
     try{
       if (typeof window.readSelected === "function"){
@@ -1881,31 +1882,56 @@ function goMineAfterShare(label = getLabel()) {
 
   // [CHANGE] FeedUnified.uploadPost 내부, fd.append 전에 넣기
   async function uploadPost({ blob, text, width, height, bg }) {
+  // 선택: 레이아웃 지정 (정사각 + 배경 + 줌)
+  // 호출부에서 { layout:{ size?:number, zoom:number, bg?:string } }를 넘기면
+  // 해당 배율로 여백을 반영해 합성한다.
+    const __layout = arguments[0]?.layout || null;
     const label = getLabel();
     const ns    = getNS();
     const csrf  = await ensureCSRF();
     const id    = `g_${now()}`;
-
-    // 🔴 업로드용 블랍을 표준화
-    try {
-      // blob → Image → temp canvas
-      const img = await blobToImage(blob);
+  // 🔴 업로드용 블랍을 표준화 (+옵션: 줌/여백 반영)
+  try {
+    const img = await blobToImage(blob);
+    if (__layout && typeof __layout.zoom === 'number') {
+      // 여백 제어 모드: 정사각 캔버스에 배경 + 배율 적용
+      const side = Math.max(
+        1024,
+        Math.min(2048, __layout.size || Math.max(img.naturalWidth, img.naturalHeight))
+      );
       const c = document.createElement('canvas');
-      c.width = img.naturalWidth; c.height = img.naturalHeight;
-      c.getContext('2d').drawImage(img, 0, 0);
-
-      // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
-      const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
-      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0.08, size: target });
-
-      // 캔버스 → Blob
+      c.width = c.height = side;
+      const ctx = c.getContext('2d', { alpha: true });
+      // 배경
+      const bgHex = (typeof __layout.bg === 'string' && __layout.bg) ? __layout.bg : (bg || '#FFFFFF');
+      if (bgHex) { ctx.fillStyle = bgHex; ctx.fillRect(0,0,side,side); }
+      // 원본을 정사각 내부에 "맞춤"한 뒤, zoom 배율 적용 (zoom<1 → 여백↑, zoom>1 → 여백↓/클립)
+      const fit = Math.min(side / img.naturalWidth, side / img.naturalHeight);
+      const scale = fit * Math.max(0.1, Math.min(__layout.zoom, 8)); // 안전 클램프
+      const dw = Math.round(img.naturalWidth  * scale);
+      const dh = Math.round(img.naturalHeight * scale);
+      const dx = Math.round((side - dw) / 2);
+      const dy = Math.round((side - dh) / 2);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, dx, dy, dw, dh);
+      blob   = await SDF.Utils.canvasToBlob(c, 'image/png');
+      width  = side;
+      height = side;
+    } else {
+      // 기존: 내용 트림 + 정사각 패딩(0.08)
+      const src = document.createElement('canvas');
+      src.width = img.naturalWidth; src.height = img.naturalHeight;
+      src.getContext('2d').drawImage(img,0,0);
+      const target = Math.max(1024, Math.min(2048, Math.max(src.width, src.height)));
+      const norm = SDF.Utils.trimAndPadToSquare(src, { padding: 0.08, size: target });
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
       width  = norm.width;
       height = norm.height;
-    } catch (e) {
-      // 실패해도 그냥 원본으로 진행
-      console.warn('[upload] normalize skipped:', e);
     }
+  } catch (e) {
+    console.warn('[upload] normalize skipped:', e);
+  }
+  
 
     const fd = new FormData();
     const author = await getAuthorMeta().catch(()=>null);
@@ -2309,11 +2335,43 @@ function goMineAfterShare(label = getLabel()) {
 
       // 배경색(공통 컬러 피커 사용)
       let bgHex = '#FFFFFF';
+
+      // ── 줌 컨트롤 UI 먼저 생성
+      const zoomWrap = document.createElement("div");
+      zoomWrap.className = "im-zoom";
+      const btnOut = document.createElement("button"); btnOut.type="button"; btnOut.className="im-zoom-btn"; btnOut.textContent="–";
+      const btnIn  = document.createElement("button");  btnIn.type="button";  btnIn.className="im-zoom-btn"; btnIn.textContent="+";
+      const zRead  = document.createElement("span");    zRead.className="im-zoom-readout"; zRead.textContent="100%";
+      zoomWrap.append(btnOut, zRead, btnIn);
+
+      // 줌 상태/로직
+      let zoom = 1.0;
+      const Z_MIN = 0.25, Z_MAX = 4, Z_STEP = 1.1;
+      function setZoom(next){
+        zoom = Math.max(Z_MIN, Math.min(Z_MAX, next));
+        zRead.textContent = Math.round(zoom*100) + '%';
+        // 미리보기는 CSS 변환만 (업로드 때 실제 합성)
+        img.style.transform = `translate(-50%,-50%) scale(${zoom})`;
+        img.style.transformOrigin = '50% 50%';
+      }
+      setZoom(1.0);
+
+      btnIn.addEventListener('click',  ()=> setZoom(zoom * Z_STEP));
+      btnOut.addEventListener('click', ()=> setZoom(zoom / Z_STEP));
+      // 휠로도 조절 (Ctrl/⌘ 없이)
+      stage.addEventListener('wheel', (e)=>{
+        if (e.ctrlKey || e.metaKey) return;
+        e.preventDefault();
+        setZoom(zoom * (e.deltaY > 0 ? 1 / Z_STEP : Z_STEP));
+      }, { passive:false });
+
+      // 컬러 피커
       const applyBg = (c) => { left.style.background = c; stage.style.background = c; bgHex = c; };
       const picker = buildColorPicker({ onChange: (hex) => applyBg(hex) });
       applyBg('#FFFFFF');
 
-      right.append(acct, caption, meta, picker.el);
+      // 우측 패널 조립 (중복 없이 한 번만 append)
+      right.append(acct, caption, meta, picker.el, zoomWrap);
       body.append(left, right);
       shell.append(head, body);
       back.append(shell);
@@ -2348,7 +2406,14 @@ function goMineAfterShare(label = getLabel()) {
         share.textContent = "Sharing…";
         try {
           if (!await requireLoginOrRedirect()) return;
-          await uploadPost({ blob, text: caption.value, width: w, height: h, bg: bgHex });
+          await uploadPost({
+            blob,
+            text: caption.value,
+            width: w,
+            height: h,
+            bg: bgHex,
+            layout: { zoom, bg: bgHex, size: Math.max(1024, Math.min(2048, Math.max(w||1024, h||1024))) }
+          });
           // ✅ 업로드 성공 → mine으로 이동
           goMineAfterShare();
           return; // 네비게이션 트리거 이후 아래 코드는 사실상 실행되지 않음
@@ -2412,12 +2477,31 @@ function goMineAfterShare(label = getLabel()) {
 
     // 배경색
     let bgHex = '#FFFFFF';
+    let zoom = 1.0; const Z_MIN=0.25, Z_MAX=4, Z_STEP=1.1;
+    function setZoom(next){
+      zoom = Math.max(Z_MIN, Math.min(Z_MAX, next));
+      if (stageImg && stage.classList.contains('has-image')) {
+        stageImg.style.transform = `translate(-50%,-50%) scale(${zoom})`;
+        stageImg.style.transformOrigin = '50% 50%';
+      }
+      zRead.textContent = Math.round(zoom*100) + '%';
+    }
     const applyBg = (c) => { left.style.background = c; stage.style.background = c; bgHex = c; };
     const picker  = buildColorPicker({ onChange: (hex)=> applyBg(hex) });
     applyBg('#FFFFFF');
 
-    right.append(acct, caption, meta, attach, picker.el);
-
+    right.append(acct, caption, meta, attach, picker.el);    
+    // 줌 컨트롤
+    const zoomWrap = document.createElement('div'); zoomWrap.className = 'im-zoom';
+    const btnOut = document.createElement('button'); btnOut.type='button'; btnOut.className='im-zoom-btn'; btnOut.textContent='–';
+    const btnIn  = document.createElement('button'); btnIn.type='button';  btnIn.className='im-zoom-btn'; btnIn.textContent='+';
+    const zRead  = document.createElement('span');  zRead.className='im-zoom-readout'; zRead.textContent='100%';
+    zoomWrap.append(btnOut, zRead, btnIn);
+    right.append(acct, caption, meta, attach, picker.el, zoomWrap);
+    setZoom(1.0);
+    btnIn.addEventListener('click',  ()=> setZoom(zoom*Z_STEP));
+    btnOut.addEventListener('click', ()=> setZoom(zoom/Z_STEP));
+    stage.addEventListener('wheel', (e)=>{ if(e.ctrlKey||e.metaKey) return; e.preventDefault(); setZoom(zoom * (e.deltaY>0 ? 1/Z_STEP : Z_STEP)); }, { passive:false });
     // 글로벌 닫기
     const globalClose = document.createElement("button");
     globalClose.className = "im-head-close";
@@ -2488,7 +2572,8 @@ function goMineAfterShare(label = getLabel()) {
           text: caption.value,
           width: state.w,
           height: state.h,
-          bg: bgHex
+          bg: bgHex,
+          layout: { zoom, bg: bgHex, size: Math.max(1024, Math.min(2048, Math.max(state.w||1024, state.h||1024))) }
         });
         // ✅ 업로드 성공 → mine으로 이동
         goMineAfterShare();
