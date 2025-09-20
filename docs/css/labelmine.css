@@ -341,7 +341,7 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
 .labelmine-body #fc-text:focus{ border-color:#cfd8e3; box-shadow:0 0 0 3px rgba(255,167,101,.18); }
 .labelmine-body .fc-actions{ display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; }
 .labelmine-body .file-pill{ display:inline-flex; align-items:center; gap:8px; border:1px dashed #cfd3d6; padding:8px 12px; border-radius:9999px; background:#fff; cursor:pointer; font-weight:600; color:#333; }
-.labelmine-body .file-pill .hint{ font-size:12px; color:#666; }
+.labelmine-body .file-pill .hint{ font-size:12px; color:#666; margin-left:6px; }
 .labelmine-body #fc-file{ display:none; }
 .labelmine-body .btn{ border-radius:9999px; border:1px solid #cfd3d6; background:#fff; padding:9px 14px; font-weight:600; cursor:pointer; }
 .labelmine-body .btn[disabled]{ opacity:.6; pointer-events:none; }
@@ -507,50 +507,71 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
 }
 
 /* =====================================================================
-   13-1) CROP TOOLS — 버튼 고정(fixed) + ‘위로’ 펼치는 팝오버
-   - 버튼 앵커: 모달 중앙(50%) 기준 600px 폭을 가정해 좌/우 16px 인셋으로 고정
-   - 팝오버: 버튼 ‘위’에서 열림, transform-origin: bottom
+   13-1) CROP TOOLS — buttons + popovers (요구사항 반영)
+   - 버튼: 위치 변화 없음(좌하: ratio, 우하: zoom)
+   - 버튼 활성시 흰색으로 전환
+   - 버튼 위쪽에 흰색 팝오버(비율 메뉴/줌 슬라이더)
 ===================================================================== */
-/* 버튼(좌하: ratio, 우하: zoom) — 화면 스크롤/캔버스 이동과 무관하게 고정 */
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-btn[data-role="ratio"],
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-btn[data-role="zoom"]{
-  position:fixed;
-  bottom: max(16px, env(safe-area-inset-bottom, 0px));
-  z-index:5601;
+.crop-tools{
+  position:absolute; left:16px; bottom:16px; display:flex; align-items:center; gap:12px; z-index:5; /* ratio anchor 기준 */
+}
+.crop-btn{
   width:40px; height:40px; border-radius:9999px;
   background:#3b3b3b; color:#fff; display:grid; place-items:center;
   box-shadow:0 3px 16px rgba(0,0,0,.25); border:1px solid #e5e7eb;
   transition:background .15s ease, box-shadow .15s ease, border-color .15s ease;
 }
-/* 모달 중앙(50%) - 300px(절반) + 16px 인셋 */
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-btn[data-role="ratio"]{ left:  calc(50% - 300px + 16px); }
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-btn[data-role="zoom"] { right: calc(50% - 300px + 16px); }
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-btn.is-active{ background:#fff; color:#111; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.crop-btn.is-active{ background:#fff; color:#111; box-shadow:0 1px 2px rgba(0,0,0,.08); }
 
-/* 공통 팝오버 카드 — 버튼 ‘위’에서 고정 */
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-pop{
-  position:fixed;
-  bottom: calc(16px + 40px + 16px);         /* 버튼(40) 위 + 여백 */
-  transform-origin: bottom center;
+/* 각각의 버튼 위치(기존 유지) */
+.crop-btn[data-role="ratio"]{ position:absolute; left:16px; bottom:16px; }
+.crop-btn[data-role="zoom"]{ position:absolute; right:16px; bottom:16px; }
+
+/* 공통 팝오버 카드 (버튼 위쪽, 흰 배경) */
+/* 공통 팝오버 카드 (버튼 위쪽, 흰 배경) */
+.crop-pop{
+  position:absolute;
+  bottom:72px;                         /* 위로 뜨도록 기준 유지 */
   background:#fff; color:#111;
-  border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 24px rgba(0,0,0,.18);
-  padding:10px; opacity:0; transform:translateY(6px) scale(.98);
-  pointer-events:none; transition:opacity .16s, transform .16s; z-index:5600;
+  display:block;                       /* opacity/pointer-events로 표시 제어 */
+  border:1px solid #e5e7eb; border-radius:12px;
+  box-shadow:0 12px 24px rgba(0,0,0,.18);
+  padding:10px;
+
+  /* ⬇️ '위로 펼쳐짐'을 자연스럽게: 기준점을 아래 중앙으로 고정 */
+  transform-origin: bottom center;
+
+  /* 살짝 아래에서 위로 떠오르는 감각 */
+  opacity:0;
+  transform:translateY(6px) scale(.98);
+
+  pointer-events:none;
+  transition:opacity .16s, transform .16s;
+  z-index:6;                           /* 캔버스/툴보다 위 */
 }
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-pop.is-open{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+.crop-pop.is-open{
+  opacity:1;
+  transform:translateY(0) scale(1);
+  pointer-events:auto;
+  display:block;
 
-/* 팝오버 좌/우 앵커 — 모달 중앙 기준 고정 */
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-menu{ left:  calc(50% - 300px + 16px); }
-:is(.labelmine-body, body:has(.labelmine-body)) .cmodal .crop-zoom{ right: calc(50% - 300px + 16px); }
+  /* 애니메이션 품질(특히 사파리/저사양) 향상 */
+  will-change: transform, opacity;
+}
 
-/* 비율 메뉴 버튼 룩 */
+
+/* 개별 앵커(비율=좌, 줌=우) */
+.crop-menu{ left:16px; }
+.crop-zoom{ right:16px; }
+
+/* 비율 메뉴 버튼 룩(흰 카드 위) */
 .crop-menu button{
   display:flex; align-items:center; justify-content:space-between; gap:10px;
   min-width:86px; color:#111; background:transparent; padding:8px 10px; border-radius:10px; border:0; cursor:pointer;
 }
 .crop-menu button:hover{ background:#f5f6f7; }
 
-/* 줌 슬라이더 — 흰 트랙 + 검은 썸(흰 링) */
+/* 줌 슬라이더 — 흰 배경 트랙 + 검은 썸(흰 링) */
 .crop-zoom input[type="range"]{
   width:220px; height:10px; border-radius:9999px; -webkit-appearance:none; appearance:none; outline:none;
   background:#fff; border:1px solid #e5e7eb;
@@ -565,7 +586,7 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
   background:#111; box-shadow:0 0 0 3px #fff, 0 1px 0 rgba(0,0,0,.1); cursor:pointer;
 }
 
-/* 보조 레이어: 그리드/프레임 */
+/* 그리드 오버레이/프레임 */
 .crop-overlay{
   position:absolute; inset:0; opacity:0; transition:opacity .12s linear; pointer-events:none;
   background:
