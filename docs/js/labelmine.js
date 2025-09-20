@@ -2799,24 +2799,27 @@ function goMineAfterShare(label = getLabel()) {
         globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
       }
 
+      // 존재하는 state 대신 모듈 변수(zoom, tx, ty) 사용
       function setZoomAroundCenter(nextScale) {
         const cw = canvas.width, ch = canvas.height;
         const cx = cw / 2, cy = ch / 2;
 
-        const s0  = state.scale;
-        const tx0 = state.tx;
-        const ty0 = state.ty;
+        // 현재 값 읽기
+        const s0  = zoom;
+        const tx0 = tx;
+        const ty0 = ty;
 
-        // 1) 현재 중심 픽셀이 가리키는 월드 좌표(이미지 좌표)
+        // 현재 화면 중심이 가리키는 월드 좌표(이미지 좌표)
         const wx = (cx - tx0) / s0;
         const wy = (cy - ty0) / s0;
 
-        // 2) 스케일 갱신
-        state.scale = nextScale;
+        // 스케일 갱신 (범위 보정)
+        const clamped = Math.max(minCover, Math.min(4, Number(nextScale) || 1));
+        zoom = clamped;
 
-        // 3) 같은 월드점이 여전히 화면 중심에 오도록 pan을 절대 재계산
-        state.tx = cx - wx * nextScale;
-        state.ty = cy - wy * nextScale;
+        // 같은 월드점이 화면 중심에 남도록 pan 재계산
+        tx = cx - wx * zoom;
+        ty = cy - wy * zoom;
       }
 
       async function exportCroppedCanvas(){
