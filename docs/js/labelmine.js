@@ -2558,12 +2558,12 @@ function goMineAfterShare(label = getLabel()) {
       stage.className = "cm-stage";
       const img = document.createElement("img");
       img.src = url; img.alt = "";
+      
       stage.append(img);
-      // === [ADD] Interactive crop canvas (square viewport) ===
+      /* --- CROP CANVAS (square) --- */
       const cropWrap = document.createElement('div');
       cropWrap.className = 'cm-crop-wrap';
       const canvas = document.createElement('canvas');
-      // responsive square: use min(720, viewport)
       const vw = Math.max(320, Math.min(720, Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.8)));
       canvas.width = vw; canvas.height = vw;
       canvas.className = 'cm-canvas';
@@ -2571,46 +2571,59 @@ function goMineAfterShare(label = getLabel()) {
       canvas.style.display = 'block';
       canvas.style.margin = '0 auto';
       canvas.style.maxWidth = '100%';
+      // mount stage early
+      body.append(stage);
+      // replace preview IMG with canvas
+      stage.replaceChildren(cropWrap);
       cropWrap.append(canvas);
-      stage.innerHTML = ''; // replace preview img with canvas stage
-      stage.append(cropWrap);
 
       const ctx = canvas.getContext('2d');
       let scale = 1, minScale = 1, maxScale = 8;
-      let tx = 0, ty = 0; // translate from center
+      let tx = 0, ty = 0;
       let dragging = false, lastX = 0, lastY = 0;
-      const bg = null; // transparent export
-
       const srcImg = new Image();
       srcImg.onload = () => {
-        // initial fit: cover the square
         const cover = Math.max(canvas.width / srcImg.naturalWidth, canvas.height / srcImg.naturalHeight);
-        minScale = cover;
-        scale = cover;
-        maxScale = cover * 6;
-        tx = 0; ty = 0;
+        minScale = cover; scale = cover; maxScale = cover * 6; tx = 0; ty = 0;
         draw();
       };
-      // keep canvas device-pixel ratio synced visually (no re-export here)
-      window.addEventListener('resize', ()=>{ draw(); }, { passive:true });
-
       srcImg.src = url;
 
       function draw(){
-        // clear
-        ctx.save();
         ctx.setTransform(1,0,0,1,0,0);
         ctx.clearRect(0,0,canvas.width, canvas.height);
         ctx.translate(canvas.width/2 + tx, canvas.height/2 + ty);
         ctx.scale(scale, scale);
-        // draw image centered
         ctx.drawImage(srcImg, -srcImg.naturalWidth/2, -srcImg.naturalHeight/2);
-        ctx.restore();
-
       }
 
-      // Drag to pan
-      canvas.addEventListener('pointerdown', (e)=>{ dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
+      canvas.addEventListener('pointerdown', (e)=>{ dragging = true; lastX = e.clientX; lastY = e.clientY; try{canvas.setPointerCapture(e.pointerId);}catch{} });
+      canvas.addEventListener('pointerup',   (e)=>{ dragging = false; try{canvas.releasePointerCapture(e.pointerId);}catch{} });
+      canvas.addEventListener('pointercancel',(e)=>{ dragging = false; try{canvas.releasePointerCapture(e.pointerId);}catch{} });
+      canvas.addEventListener('pointermove', (e)=>{
+        if (!dragging) return;
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        lastX = e.clientX; lastY = e.clientY;
+        tx += dx; ty += dy;
+        draw();
+      });
+
+      canvas.addEventListener('wheel', (e)=>{
+        e.preventDefault();
+        const delta = Math.sign(e.deltaY) * -0.1;
+        const old = scale;
+        const next = Math.min(maxScale, Math.max(minScale, scale * (1 + delta)));
+        if (next === scale) return;
+        const rect = canvas.getBoundingClientRect();
+        const cx = e.clientX - rect.left - canvas.width/2 - tx;
+        const cy = e.clientY - rect.top  - canvas.height/2 - ty;
+        tx -= cx * (next/old - 1);
+        ty -= cy * (next/old - 1);
+        scale = next;
+        draw();
+      }, { passive:false });
+    ('pointerdown', (e)=>{ dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
       canvas.addEventListener('pointerup',   (e)=>{ dragging = false; try{ canvas.releasePointerCapture(e.pointerId); }catch{} });
       canvas.addEventListener('pointercancel',(e)=>{ dragging = false; try{ canvas.releasePointerCapture(e.pointerId); }catch{} });
       canvas.addEventListener('pointermove', (e)=>{
