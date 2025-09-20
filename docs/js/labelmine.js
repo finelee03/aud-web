@@ -2559,7 +2559,85 @@ function goMineAfterShare(label = getLabel()) {
       const img = document.createElement("img");
       img.src = url; img.alt = "";
       stage.append(img);
-      body.append(stage);
+      // === [ADD] Interactive crop canvas (square viewport) ===
+      const cropWrap = document.createElement('div');
+      cropWrap.className = 'cm-crop-wrap';
+      const canvas = document.createElement('canvas');
+      // responsive square: use min(720, viewport)
+      const vw = Math.max(320, Math.min(720, Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.8)));
+      canvas.width = vw; canvas.height = vw;
+      canvas.className = 'cm-canvas';
+      cropWrap.append(canvas);
+      stage.innerHTML = ''; // replace preview img with canvas stage
+      stage.append(cropWrap);
+
+      const ctx = canvas.getContext('2d');
+      let scale = 1, minScale = 1, maxScale = 8;
+      let tx = 0, ty = 0; // translate from center
+      let dragging = false, lastX = 0, lastY = 0;
+      const bg = '#ffffff';
+
+      const srcImg = new Image();
+      srcImg.onload = () => {
+        // initial fit: cover the square
+        const cover = Math.max(canvas.width / srcImg.naturalWidth, canvas.height / srcImg.naturalHeight);
+        minScale = cover;
+        scale = cover;
+        maxScale = cover * 6;
+        tx = 0; ty = 0;
+        draw();
+      };
+      srcImg.src = url;
+
+      function draw(){
+        // clear
+        ctx.save();
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.fillStyle = bg;
+        ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.translate(canvas.width/2 + tx, canvas.height/2 + ty);
+        ctx.scale(scale, scale);
+        // draw image centered
+        ctx.drawImage(srcImg, -srcImg.naturalWidth/2, -srcImg.naturalHeight/2);
+        ctx.restore();
+
+        // overlay guide (safe minimal)
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.strokeRect(1,1,canvas.width-2,canvas.height-2);
+        ctx.restore();
+      }
+
+      // Drag to pan
+      canvas.addEventListener('pointerdown', (e)=>{ dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
+      canvas.addEventListener('pointerup',   (e)=>{ dragging = false; try{ canvas.releasePointerCapture(e.pointerId); }catch{} });
+      canvas.addEventListener('pointercancel',(e)=>{ dragging = false; try{ canvas.releasePointerCapture(e.pointerId); }catch{} });
+      canvas.addEventListener('pointermove', (e)=>{
+        if (!dragging) return;
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        lastX = e.clientX; lastY = e.clientY;
+        tx += dx; ty += dy;
+        draw();
+      });
+
+      // Wheel to zoom (around cursor)
+      canvas.addEventListener('wheel', (e)=>{
+        e.preventDefault();
+        const delta = Math.sign(e.deltaY) * -0.1; // trackpad natural
+        const oldScale = scale;
+        const next = Math.min(maxScale, Math.max(minScale, scale * (1 + delta)));
+        if (next === scale) return;
+        // zoom around cursor point
+        const rect = canvas.getBoundingClientRect();
+        const cx = e.clientX - rect.left - canvas.width/2 - tx;
+        const cy = e.clientY - rect.top  - canvas.height/2 - ty;
+        tx -= cx * (next/oldScale - 1);
+        ty -= cy * (next/oldScale - 1);
+        scale = next;
+        draw();
+      }, { passive:false });
 
       shell.append(head, body);
       back.append(shell);
@@ -2596,14 +2674,22 @@ function goMineAfterShare(label = getLabel()) {
       });
 
       // 다음
-      nextBtn.addEventListener("click", ()=>{
+      nextBtn.addEventListener("click", async ()=>{
         nextBtn.disabled = true;
         title.textContent = "New post";
+        async function exportBlob(){
+          try{
+            const b = await new Promise(res => canvas.toBlob(res, "image/png", 1));
+            const blobOut = b || blob; // fallback
+            return { blob: blobOut, w: canvas.width, h: canvas.height };
+          }catch{ return { blob, w: canvas.width, h: canvas.height }; }
+        }
         // 모바일에서는 모션 없이 바로 종료
         const noMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches || window.innerWidth <= 640;
         if (noMotion){
+          const out = await exportBlob();
           cleanup();
-          resolve({ blob, w, h });
+          resolve(out);
           return;
         }
         // 1) 먼저 너비를 950px로 부드럽게 확장
@@ -2611,11 +2697,12 @@ function goMineAfterShare(label = getLabel()) {
         shell.getBoundingClientRect();
         shell.classList.add("is-grow-to-compose");
         // 2) 트랜지션 종료 후 닫고 step3로 진행
-        const onEnd = (e)=>{
+        const onEnd = async (e)=>{
           if (e.propertyName !== "width") return;
           shell.removeEventListener("transitionend", onEnd);
+          const out = await exportBlob();
           cleanup();
-          resolve({ blob, w, h });
+          resolve(out);
         };
         shell.addEventListener("transitionend", onEnd);
       });
