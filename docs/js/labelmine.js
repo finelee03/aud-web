@@ -1122,10 +1122,10 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       function zoomAtCenter(scale){ const rect = wrap.getBoundingClientRect(); zoomAtPoint(scale, rect.left + rect.width/2, rect.top + DEFAULTS.heightPx/2, wrap); }
 
       function resetZoom(){
-        const rect = wrap.getBoundingClientRect(); const targetZoom = 1; const prevZoom = zoom; if (prevZoom === targetZoom) return;
+        const rect = wrap.getBoundingClientRect(); const nextScale = 1; const prevZoom = zoom; if (prevZoom === nextScale) return;
         const cx = rect.left + rect.width/2; const cy = rect.top  + DEFAULTS.heightPx/2;
         const worldX = scrollX + (cx - rect.left) / prevZoom; const worldY = scrollY + (cy - rect.top ) / prevZoom;
-        scrollX = worldX - (cx - rect.left) / targetZoom; scrollY = worldY - (cy - rect.top ) / targetZoom; zoom = targetZoom;
+        scrollX = worldX - (cx - rect.left) / nextScale; scrollY = worldY - (cy - rect.top ) / nextScale; zoom = nextScale;
         requestRepaint(); requestUpdateCursor(); scheduleSave();
       }
 
@@ -2799,33 +2799,24 @@ function goMineAfterShare(label = getLabel()) {
         globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
       }
 
-      function setZoomAroundCenter(targetZoom){
-        const before = zoom;
-        const next = Math.max(0.5, Math.min(4, targetZoom));
-        if (next === before) return;
-        const {fx, fy, fw, fh} = frameRect();
-        const cx = fx + fw/2;
-        const cy = fy + fh/2;
+      function setZoomAroundCenter(nextScale) {
+        const cw = canvas.width, ch = canvas.height;
+        const cx = cw / 2, cy = ch / 2;
 
-        const iw = img.naturalWidth * before;
-        const ih = img.naturalHeight * before;
-        const dx = fx + tx - iw/2 + fw/2;
-        const dy = fy + ty - ih/2 + fh/2;
-        const wx = (cx - dx) / before;
-        const wy = (cy - dy) / before;
+        const s0  = state.scale;
+        const tx0 = state.tx;
+        const ty0 = state.ty;
 
-        zoom = next;
-        const niw = img.naturalWidth * zoom;
-        const nih = img.naturalHeight * zoom;
-        const ndx = cx - wx * zoom;
-        const ndy = cy - wy * zoom;
-        tx = ndx - (fx - fw/2) + niw/2;
-        ty = ndy - (fy - fh/2) + nih/2;
+        // 1) 현재 중심 픽셀이 가리키는 월드 좌표(이미지 좌표)
+        const wx = (cx - tx0) / s0;
+        const wy = (cy - ty0) / s0;
 
-        overlay.classList.add("is-active");
-        draw();
-        clearTimeout(setZoomAroundCenter._t);
-        setZoomAroundCenter._t = setTimeout(()=> overlay.classList.remove("is-active"), 120);
+        // 2) 스케일 갱신
+        state.scale = nextScale;
+
+        // 3) 같은 월드점이 여전히 화면 중심에 오도록 pan을 절대 재계산
+        state.tx = cx - wx * nextScale;
+        state.ty = cy - wy * nextScale;
       }
 
       async function exportCroppedCanvas(){
