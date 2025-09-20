@@ -2567,6 +2567,10 @@ function goMineAfterShare(label = getLabel()) {
       const vw = Math.max(320, Math.min(720, Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.8)));
       canvas.width = vw; canvas.height = vw;
       canvas.className = 'cm-canvas';
+      canvas.style.touchAction = 'none';
+      canvas.style.display = 'block';
+      canvas.style.margin = '0 auto';
+      canvas.style.maxWidth = '100%';
       cropWrap.append(canvas);
       stage.innerHTML = ''; // replace preview img with canvas stage
       stage.append(cropWrap);
@@ -2575,7 +2579,7 @@ function goMineAfterShare(label = getLabel()) {
       let scale = 1, minScale = 1, maxScale = 8;
       let tx = 0, ty = 0; // translate from center
       let dragging = false, lastX = 0, lastY = 0;
-      const bg = '#ffffff';
+      const bg = null; // transparent export
 
       const srcImg = new Image();
       srcImg.onload = () => {
@@ -2587,14 +2591,16 @@ function goMineAfterShare(label = getLabel()) {
         tx = 0; ty = 0;
         draw();
       };
+      // keep canvas device-pixel ratio synced visually (no re-export here)
+      window.addEventListener('resize', ()=>{ draw(); }, { passive:true });
+
       srcImg.src = url;
 
       function draw(){
         // clear
         ctx.save();
         ctx.setTransform(1,0,0,1,0,0);
-        ctx.fillStyle = bg;
-        ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.clearRect(0,0,canvas.width, canvas.height);
         ctx.translate(canvas.width/2 + tx, canvas.height/2 + ty);
         ctx.scale(scale, scale);
         // draw image centered
