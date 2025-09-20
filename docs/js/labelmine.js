@@ -2715,8 +2715,14 @@ function goMineAfterShare(label = getLabel()) {
         const rect = stage.getBoundingClientRect();
         viewW = Math.max(1, Math.floor(rect.width));
         viewH = Math.max(1, Math.floor(rect.height));
-        canvas.width = viewW;
-        canvas.height = viewH;
+
+        // 🔻 DPR-aware 캔버스
+        const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+        canvas.style.width  = `${viewW}px`;
+        canvas.style.height = `${viewH}px`;
+        canvas.width  = Math.floor(viewW * dpr);
+        canvas.height = Math.floor(viewH * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         frame = document.createElement("div");
         frame.className = "crop-frame";
@@ -2731,19 +2737,21 @@ function goMineAfterShare(label = getLabel()) {
         ctx.clearRect(0, 0, viewW, viewH);
         const { fx, fy, fw, fh } = frameRect();
 
+        // ε 패딩으로 언더필 방지
         ctx.save();
         ctx.beginPath();
-        ctx.rect(fx, fy, fw, fh);
+        ctx.rect(fx - 0.5, fy - 0.5, fw + 1, fh + 1);
         ctx.clip();
 
         const iw = img.naturalWidth, ih = img.naturalHeight;
         const drawW = iw * zoom;
         const drawH = ih * zoom;
 
-        // 프레임 중심 기준 정렬
-        const dx = Math.round(fx + tx - drawW/2 + fw/2);
-        const dy = Math.round(fy + ty - drawH/2 + fh/2);
+        // 🔻 반올림 제거 — 소수 좌표 유지
+        const dx = fx + tx - drawW / 2 + fw / 2;
+        const dy = fy + ty - drawH / 2 + fh / 2;
 
+        ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, dx, dy, drawW, drawH);
         ctx.restore();
@@ -2934,35 +2942,40 @@ function goMineAfterShare(label = getLabel()) {
       }
 
       // Next → 프레임 영역만 정확히 추출
-      nextBtn.addEventListener("click", async ()=>{
+      nextBtn.addEventListener("click", async () => {
         const { fx, fy, fw, fh } = frameRect();
 
         const iw = img.naturalWidth, ih = img.naturalHeight;
         const drawW = iw * zoom, drawH = ih * zoom;
-        const dx = Math.round(fx + tx - drawW/2 + fw/2);
-        const dy = Math.round(fy + ty - drawH/2 + fh/2);
+
+        // 화면(프레임) 좌표에서 원본 좌표로 역산
+        const dx = fx + tx - drawW / 2 + fw / 2;
+        const dy = fy + ty - drawH / 2 + fh / 2;
+
+        // 소스 사각형 (원본 좌표계), 필요시 ε 패딩
+        const eps = 0.01; // 원본 좌표계에서는 아주 작게
+        let sx = (fx - dx) / zoom - eps;
+        let sy = (fy - dy) / zoom - eps;
+        let sw = (fw / zoom) + eps * 2;
+        let sh = (fh / zoom) + eps * 2;
+
+        // 원본 경계로 안전 클램프
+        if (sx < 0) { sw += sx; sx = 0; }
+        if (sy < 0) { sh += sy; sy = 0; }
+        if (sx + sw > iw) sw = iw - sx;
+        if (sy + sh > ih) sh = ih - sy;
 
         const out = document.createElement("canvas");
         out.width = fw; out.height = fh;
         const octx = out.getContext("2d", { alpha: true });
+        octx.imageSmoothingEnabled = true;
         octx.imageSmoothingQuality = "high";
 
-        // 원본 좌표계에서 절취 범위
-        const sx = Math.max(0, (fx - dx) / zoom);
-        const sy = Math.max(0, (fy - dy) / zoom);
-        const sw = Math.min(iw - sx, fw / zoom);
-        const sh = Math.min(ih - sy, fh / zoom);
+        // 목적지는 항상 프레임 전체
+        octx.clearRect(0, 0, fw, fh);
+        octx.drawImage(img, sx, sy, sw, sh, 0, 0, fw, fh);
 
-        octx.clearRect(0,0,fw,fh);
-        octx.drawImage(
-          img, sx, sy, sw, sh,
-          Math.max(0, dx > fx ? dx - fx : 0),
-          Math.max(0, dy > fy ? dy - fy : 0),
-          Math.round(sw * zoom),
-          Math.round(sh * zoom)
-        );
-
-        out.toBlob((b)=>{
+        out.toBlob((b) => {
           if (!b) return;
           cleanup();
           resolve({ blob: b, w: out.width, h: out.height });
