@@ -757,7 +757,7 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       const id = `g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
 
       // 🔴 정규화: 트림+패딩+정사각(1024)
-      const norm = SDF.Utils.trimAndPadToSquare(canvas, { padding: 0.08, size: 1024 });
+      const norm = SDF.Utils.trimAndPadToSquare(canvas, { padding: 0, size: 1024 });
 
       const dataURL = norm.toDataURL("image/png"); // alpha 유지
       const thumbDataURL = await makeThumbnail(dataURL, 320, 240);
@@ -1897,7 +1897,7 @@ function goMineAfterShare(label = getLabel()) {
 
       // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
       const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
-      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0.08, size: target });
+      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0, size: target });
 
       // 캔버스 → Blob
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
