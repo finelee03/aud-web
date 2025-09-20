@@ -2277,8 +2277,10 @@ function goMineAfterShare(label = getLabel()) {
       const body  = document.createElement("div"); body.className = "im-body";
       const left  = document.createElement("div"); left.className = "im-left";
       const stage = document.createElement("div"); stage.className = "im-stage has-image";
-      const img   = document.createElement("img"); img.src = url; img.alt = "";
-      stage.append(img); left.append(stage);
+const viewport = document.createElement("div"); viewport.className = "im-viewport"; viewport.style.cssText="position:relative;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px;";
+const canvas = document.createElement("div"); canvas.className="im-canvas"; canvas.style.cssText="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;cursor:grab;";
+const img   = document.createElement("img"); img.src = url; img.alt = ""; img.style.cssText="display:block;max-width:none;max-height:none;user-select:none;pointer-events:none;";
+canvas.append(img); viewport.append(canvas); stage.append(viewport); left.append(stage);
 
       const right = document.createElement("div"); right.className = "im-right";
       const acct  = document.createElement("div"); acct.className  = "im-acct";
@@ -2315,7 +2317,53 @@ function goMineAfterShare(label = getLabel()) {
       applyBg('#FFFFFF');
 
       right.append(acct, caption, meta, picker.el);
-      body.append(left, right);
+      
+      // ── Zoom/Pan utilities (modal preview only; upload payload unaffected)
+      const VIEW_KEY = "imodal:view";
+      let s = 1, tx = 0, ty = 0;
+      function applyTransform(){ canvas.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${s})`; }
+      function fitToViewport(){
+        const v = viewport.getBoundingClientRect();
+        const nw = img.naturalWidth || 1, nh = img.naturalHeight || 1;
+        const sw = v.width / nw, sh = v.height / nh;
+        s = Math.min(sw, sh); tx = 0; ty = 0; applyTransform();
+      }
+      function reset100(){ s=1; tx=0; ty=0; applyTransform(); }
+      function zoomBy(delta, cx, cy){
+        const prev = s; s = Math.min(8, Math.max(0.2, s * (delta > 0 ? 1.1 : 0.9)));
+        const r = viewport.getBoundingClientRect();
+        const dx = cx - (r.left + r.width/2), dy = cy - (r.top + r.height/2);
+        tx = tx - dx * (s - prev) / s; ty = ty - dy * (s - prev) / s; applyTransform();
+      }
+      function persistView(){ try{ localStorage.setItem(VIEW_KEY, JSON.stringify({s,tx,ty})); }catch{} }
+      function restoreView(){
+        try{ const v = JSON.parse(localStorage.getItem(VIEW_KEY)||"null");
+          if (v && typeof v.s === "number"){ s=v.s; tx=v.tx||0; ty=v.ty||0; applyTransform(); } else { fitToViewport(); }
+        } catch { fitToViewport(); }
+      }
+      viewport.addEventListener("wheel", (e)=>{ if(!img.src) return; e.preventDefault(); zoomBy(e.deltaY, e.clientX, e.clientY); persistView(); }, {passive:false});
+      let dragging=false, sx=0, sy=0, bx=0, by=0;
+      viewport.addEventListener("pointerdown", (e)=>{ if(!img.src) return; dragging=true; canvas.style.cursor="grabbing"; sx=e.clientX; sy=e.clientY; bx=tx; by=ty; viewport.setPointerCapture(e.pointerId); });
+      viewport.addEventListener("pointermove", (e)=>{ if(!dragging) return; tx = bx + (e.clientX - sx); ty = by + (e.clientY - sy); applyTransform(); });
+      viewport.addEventListener("pointerup",   (e)=>{ if(!dragging) return; dragging=false; canvas.style.cursor="grab"; persistView(); });
+      // Toolbar buttons
+      (function(){
+        const tools = document.createElement("div");
+        tools.className = "im-tools";
+        tools.style.cssText = "display:flex;gap:.5rem;margin-top:.75rem;";
+        function btn(t, ttl, fn){ const b=document.createElement("button"); b.type="button"; b.textContent=t; b.title=ttl; b.style.cssText="padding:.4rem .6rem;border-radius:.5rem;border:1px solid var(--line,#333);background:#1c1c1c;color:#eee;"; b.addEventListener("click", fn); return b; }
+        const centerX = ()=> viewport.getBoundingClientRect().left + viewport.clientWidth/2;
+        const centerY = ()=> viewport.getBoundingClientRect().top  + viewport.clientHeight/2;
+        tools.append(
+          btn("+","줌인", ()=>{ zoomBy(-1, centerX(), centerY()); persistView(); }),
+          btn("–","줌아웃",()=>{ zoomBy(+1, centerX(), centerY()); persistView(); }),
+          btn("맞춤","전체 보이기",()=>{ fitToViewport(); persistView(); }),
+          btn("1:1","원본 배율",   ()=>{ reset100(); persistView(); })
+        );
+        right.append(tools);
+      })();
+      img.addEventListener("load", ()=>{ fitToViewport(); restoreView(); }, { once:false });
+    body.append(left, right);
       shell.append(head, body);
       back.append(shell);
 
@@ -2385,14 +2433,24 @@ function goMineAfterShare(label = getLabel()) {
     const body  = document.createElement("div"); body.className  = "im-body";
     const left  = document.createElement("div"); left.className  = "im-left";
     const stage = document.createElement("div"); stage.className = "im-stage";
-    const dummy = document.createElement("div"); dummy.className = "im-stage-dummy";
-    const chooser = document.createElement("div"); chooser.className = "im-chooser";
-    const hint  = document.createElement("div"); hint.className = "im-stage-hint"; hint.textContent = "파일을 드래그하거나 아래 버튼으로 선택하세요";
-    const pick  = document.createElement("button"); pick.className = "feedc__pick"; pick.type="button"; pick.textContent = "이미지 선택";
-    chooser.append(hint, pick);
-    const stageImg = document.createElement("img");
-    stage.append(dummy, chooser, stageImg);
-    left.append(stage);
+const dummy = document.createElement("div"); dummy.className = "im-stage-dummy";
+const chooser = document.createElement("div"); chooser.className = "im-chooser";
+const hint  = document.createElement("div"); hint.className = "im-stage-hint"; hint.textContent = "파일을 드래그하거나 아래 버튼으로 선택하세요";
+const pick  = document.createElement("button"); pick.className = "feedc__pick"; pick.type="button"; pick.textContent = "이미지 선택";
+chooser.append(hint, pick);
+// ▼ viewport/canvas for zoom & pan
+const viewport = document.createElement("div");
+viewport.className = "im-viewport";
+viewport.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px;";
+const canvas = document.createElement("div");
+canvas.className = "im-canvas";
+canvas.style.cssText = "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;cursor:grab;";
+const stageImg = document.createElement("img");
+stageImg.alt=""; stageImg.style.cssText="display:block;max-width:none;max-height:none;user-select:none;pointer-events:none;";
+canvas.appendChild(stageImg);
+viewport.appendChild(canvas);
+stage.append(dummy, chooser, viewport);
+left.append(stage);
 
     const right = document.createElement("div"); right.className = "im-right";
     const acct  = document.createElement("div"); acct.className  = "im-acct";
@@ -2419,6 +2477,52 @@ function goMineAfterShare(label = getLabel()) {
 
     right.append(acct, caption, meta, attach, picker.el);
 
+    
+    // ── Zoom/Pan utilities (modal preview only; upload payload unaffected)
+    const VIEW_KEY = "imodal:view";
+    let s = 1, tx = 0, ty = 0;
+    function applyTransform(){ canvas.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${s})`; }
+    function fitToViewport(){
+      const v = viewport.getBoundingClientRect();
+      const nw = stageImg.naturalWidth || 1, nh = stageImg.naturalHeight || 1;
+      const sw = v.width / nw, sh = v.height / nh;
+      s = Math.min(sw, sh); tx = 0; ty = 0; applyTransform();
+    }
+    function reset100(){ s=1; tx=0; ty=0; applyTransform(); }
+    function zoomBy(delta, cx, cy){
+      const prev = s; s = Math.min(8, Math.max(0.2, s * (delta > 0 ? 1.1 : 0.9)));
+      const r = viewport.getBoundingClientRect();
+      const dx = cx - (r.left + r.width/2), dy = cy - (r.top + r.height/2);
+      tx = tx - dx * (s - prev) / s; ty = ty - dy * (s - prev) / s; applyTransform();
+    }
+    function persistView(){ try{ localStorage.setItem(VIEW_KEY, JSON.stringify({s,tx,ty})); }catch{} }
+    function restoreView(){
+      try{ const v = JSON.parse(localStorage.getItem(VIEW_KEY)||"null");
+        if (v && typeof v.s === "number"){ s=v.s; tx=v.tx||0; ty=v.ty||0; applyTransform(); } else { fitToViewport(); }
+      } catch { fitToViewport(); }
+    }
+    viewport.addEventListener("wheel", (e)=>{ if(!stageImg.src) return; e.preventDefault(); zoomBy(e.deltaY, e.clientX, e.clientY); persistView(); }, {passive:false});
+    let dragging=false, sx=0, sy=0, bx=0, by=0;
+    viewport.addEventListener("pointerdown", (e)=>{ if(!stageImg.src) return; dragging=true; canvas.style.cursor="grabbing"; sx=e.clientX; sy=e.clientY; bx=tx; by=ty; viewport.setPointerCapture(e.pointerId); });
+    viewport.addEventListener("pointermove", (e)=>{ if(!dragging) return; tx = bx + (e.clientX - sx); ty = by + (e.clientY - sy); applyTransform(); });
+    viewport.addEventListener("pointerup",   (e)=>{ if(!dragging) return; dragging=false; canvas.style.cursor="grab"; persistView(); });
+    // Toolbar buttons
+    (function(){
+      const tools = document.createElement("div");
+      tools.className = "im-tools";
+      tools.style.cssText = "display:flex;gap:.5rem;margin-top:.75rem;";
+      function btn(t, ttl, fn){ const b=document.createElement("button"); b.type="button"; b.textContent=t; b.title=ttl; b.style.cssText="padding:.4rem .6rem;border-radius:.5rem;border:1px solid var(--line,#333);background:#1c1c1c;color:#eee;"; b.addEventListener("click", fn); return b; }
+      const centerX = ()=> viewport.getBoundingClientRect().left + viewport.clientWidth/2;
+      const centerY = ()=> viewport.getBoundingClientRect().top  + viewport.clientHeight/2;
+      tools.append(
+        btn("+","줌인", ()=>{ zoomBy(-1, centerX(), centerY()); persistView(); }),
+        btn("–","줌아웃",()=>{ zoomBy(+1, centerX(), centerY()); persistView(); }),
+        btn("맞춤","전체 보이기",()=>{ fitToViewport(); persistView(); }),
+        btn("1:1","원본 배율",   ()=>{ reset100(); persistView(); })
+      );
+      right.append(tools);
+    })();
+    stageImg.addEventListener("load", ()=>{ fitToViewport(); restoreView(); }, { once:false });
     // 글로벌 닫기
     const globalClose = document.createElement("button");
     globalClose.className = "im-head-close";
