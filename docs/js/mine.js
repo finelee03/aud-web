@@ -624,7 +624,7 @@
     path.setAttribute("fill", "currentColor");
     path.setAttribute("stroke", "currentColor");
     path.setAttribute("stroke-width", "1.5");
-    path.style.setProperty("fill","none","important");
+    path.style.setProperty("fill","currentColor","important");
     path.style.setProperty("stroke","currentColor","important");
     path.style.setProperty("stroke-width","1.5","important");
   }
