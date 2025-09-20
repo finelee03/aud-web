@@ -3025,5 +3025,3 @@ window.addEventListener("auth:logout", ()=>{
   const ret = encodeURIComponent(location.href);
   location.replace(`${pageHref('login.html')}?next=${ret}`);
 });
-
-ㅇㄹ
