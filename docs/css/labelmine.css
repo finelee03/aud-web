@@ -508,93 +508,117 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
 
 /* =====================================================================
    13-1) CROP TOOLS — buttons + popovers (요구사항 반영)
-   - 버튼: 위치 변화 없음(좌하: ratio, 우하: zoom)
-   - 버튼 활성시 흰색으로 전환
-   - 버튼 위쪽에 흰색 팝오버(비율 메뉴/줌 슬라이더)
+   - 버튼: 좌하(비율), 우하(줌) 고정
+   - 팝오버: 각 버튼 '위로' 펼쳐짐
+   - 한쪽 열리면 반대 버튼은 뿌옇게(회색/감도↓)
 ===================================================================== */
+
+/* 버튼 앵커 래퍼(좌측 기준) */
 .crop-tools{
-  position:absolute; left:16px; bottom:16px; display:flex; align-items:center; gap:12px; z-index:5; /* ratio anchor 기준 */
+  position:absolute; left:16px; bottom:16px;
+  display:flex; align-items:center; gap:12px;
+  z-index:5600; /* 스테이지/캔버스 위 */
 }
+
+/* 공통 버튼 */
 .crop-btn{
   width:40px; height:40px; border-radius:9999px;
-  background:#3b3b3b; color:#fff; display:grid; place-items:center;
-  box-shadow:0 3px 16px rgba(0,0,0,.25); border:1px solid #e5e7eb;
-  transition:background .15s ease, box-shadow .15s ease, border-color .15s ease;
+  display:grid; place-items:center; cursor:pointer;
+  color:#fff; background:#3b3b3b;
+  border:1px solid #e5e7eb;
+  box-shadow:0 3px 16px rgba(0,0,0,.25);
+  transition:
+    background .15s ease,
+    color .15s ease,
+    box-shadow .15s ease,
+    border-color .15s ease,
+    filter .15s ease,
+    opacity .15s ease;
 }
-.crop-btn.is-active{ background:#fff; color:#111; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.crop-btn.is-active{
+  background:#fff; color:#111;
+  box-shadow:0 1px 2px rgba(0,0,0,.08);
+}
 
-/* 각각의 버튼 위치(기존 유지) */
+/* ← 상대 버튼을 흐리게(회색/채도↓/살짝 블러) */
+.crop-btn.is-muted{
+  background:#f2f2f2; color:#888;
+  border-color:#e5e7eb;
+  filter:saturate(.25) contrast(.95) blur(.2px);
+  opacity:.55;
+  box-shadow:0 0 0 rgba(0,0,0,0);
+}
+
+/* 각각의 버튼 절대 위치(원래 위치 유지) */
 .crop-btn[data-role="ratio"]{ position:absolute; left:16px; bottom:16px; }
-.crop-btn[data-role="zoom"]{ position:absolute; right:16px; bottom:16px; }
+.crop-btn[data-role="zoom"] { position:absolute; right:16px; bottom:16px; }
 
-/* 공통 팝오버 카드 (버튼 위쪽, 흰 배경) */
-/* 공통 팝오버 카드 (버튼 위쪽, 흰 배경) */
+/* === 팝오버 공통(버튼 '위'에 뜸) === */
 .crop-pop{
   position:absolute;
-  bottom:72px;                         /* 위로 뜨도록 기준 유지 */
+  bottom:72px;                 /* 버튼에서 위로 72px */
   background:#fff; color:#111;
-  display:block;                       /* opacity/pointer-events로 표시 제어 */
   border:1px solid #e5e7eb; border-radius:12px;
   box-shadow:0 12px 24px rgba(0,0,0,.18);
-  padding:10px;
+  padding:10px; z-index:5610;
 
-  /* ⬇️ '위로 펼쳐짐'을 자연스럽게: 기준점을 아래 중앙으로 고정 */
-  transform-origin: bottom center;
-
-  /* 살짝 아래에서 위로 떠오르는 감각 */
-  opacity:0;
+  /* 위로-펼침 애니메이션 */
+  transform-origin:bottom center;
   transform:translateY(6px) scale(.98);
-
-  pointer-events:none;
+  opacity:0; pointer-events:none;
   transition:opacity .16s, transform .16s;
-  z-index:6;                           /* 캔버스/툴보다 위 */
 }
 .crop-pop.is-open{
-  opacity:1;
+  opacity:1; pointer-events:auto;
   transform:translateY(0) scale(1);
-  pointer-events:auto;
-  display:block;
-
-  /* 애니메이션 품질(특히 사파리/저사양) 향상 */
-  will-change: transform, opacity;
+  will-change:transform, opacity;
 }
 
-
-/* 개별 앵커(비율=좌, 줌=우) */
+/* 각 팝오버 앵커(좌=비율, 우=줌) */
 .crop-menu{ left:16px; }
 .crop-zoom{ right:16px; }
 
-/* 비율 메뉴 버튼 룩(흰 카드 위) */
+/* 비율 메뉴 항목 */
 .crop-menu button{
   display:flex; align-items:center; justify-content:space-between; gap:10px;
-  min-width:86px; color:#111; background:transparent; padding:8px 10px; border-radius:10px; border:0; cursor:pointer;
+  min-width:92px; padding:8px 10px;
+  color:#111; background:transparent; border:0; border-radius:10px; cursor:pointer;
 }
 .crop-menu button:hover{ background:#f5f6f7; }
 
-/* 줌 슬라이더 — 흰 배경 트랙 + 검은 썸(흰 링) */
+/* 줌 슬라이더(팝오버 내) */
 .crop-zoom input[type="range"]{
-  width:220px; height:10px; border-radius:9999px; -webkit-appearance:none; appearance:none; outline:none;
+  width:220px; height:10px; border-radius:9999px;
+  -webkit-appearance:none; appearance:none; outline:none;
   background:#fff; border:1px solid #e5e7eb;
 }
 .crop-zoom input[type="range"]::-webkit-slider-thumb{
   -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
-  background:#111; box-shadow:0 0 0 3px #fff, 0 1px 0 rgba(0,0,0,.1); cursor:pointer;
+  background:#111;
+  box-shadow:0 0 0 3px #fff, 0 1px 0 rgba(0,0,0,.1);
+  cursor:pointer;
 }
 .crop-zoom input[type="range"]::-moz-range-track{ height:6px; border-radius:9999px; background:transparent; }
 .crop-zoom input[type="range"]::-moz-range-thumb{
   width:14px; height:14px; border:0; border-radius:50%;
-  background:#111; box-shadow:0 0 0 3px #fff, 0 1px 0 rgba(0,0,0,.1); cursor:pointer;
+  background:#111;
+  box-shadow:0 0 0 3px #fff, 0 1px 0 rgba(0,0,0,.1);
+  cursor:pointer;
 }
 
-/* 그리드 오버레이/프레임 */
+/* 보조: 오버레이/프레임(기존 유지) */
 .crop-overlay{
-  position:absolute; inset:0; opacity:0; transition:opacity .12s linear; pointer-events:none;
+  position:absolute; inset:0; pointer-events:none;
+  opacity:0; transition:opacity .12s linear;
   background:
     linear-gradient(#0000 1px, #fff3 1px) 0 0/100% 33.333%,
     linear-gradient(90deg, #0000 1px, #fff3 1px) 0 0/33.333% 100%;
 }
 .crop-overlay.is-active{ opacity:1; }
-.crop-frame{ position:absolute; border:1.4px solid #fff; border-radius:6px; pointer-events:none; box-shadow:none; background:transparent; }
+.crop-frame{
+  position:absolute; border:1.4px solid #fff; border-radius:6px;
+  pointer-events:none; background:transparent; box-shadow:none;
+}
 
 /* =====================================================================
    14) Canvas interaction (unified)
@@ -603,5 +627,3 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
   display:block; margin:0 auto; max-width:100%; max-height:100%; height:auto;
   touch-action:none; image-rendering:auto;
 }
-
-.cm-stage { position: relative; }

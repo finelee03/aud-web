@@ -2513,355 +2513,371 @@ function goMineAfterShare(label = getLabel()) {
     window.openFeedModal = openFeedModal;
   }
 
-  // labelmine.js — openCropModal (button/slider zoom enabled, gestures disabled)
-  function openCropModal({ blob, w, h }) {
-    return new Promise((resolve, reject) => {
-      document.body.classList.add("is-cropping");
+// labelmine.js — openCropModal (button/slider zoom enabled, gestures disabled)
+function openCropModal({ blob, w, h }) {
+  return new Promise((resolve, reject) => {
+    document.body.classList.add("is-cropping");
 
-      const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
 
-      // Backdrop & shell
-      const back  = document.createElement("div");
-      back.className = "cmodal-backdrop imodal-backdrop";
+    // Backdrop & shell
+    const back  = document.createElement("div");
+    back.className = "cmodal-backdrop imodal-backdrop";
 
-      const shell = document.createElement("div");
-      shell.className = "cmodal imodal";
+    const shell = document.createElement("div");
+    shell.className = "cmodal imodal";
 
-      // Header
-      const head  = document.createElement("div");
-      head.className = "cm-head";
+    // Header
+    const head  = document.createElement("div");
+    head.className = "cm-head";
 
-      const backBtn = document.createElement("button");
-      backBtn.type = "button";
-      backBtn.className = "cm-back";
-      backBtn.innerHTML = '<span class="feed-ico-back"></span>';
+    const backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.className = "cm-back";
+    backBtn.innerHTML = '<span class="feed-ico-back"></span>';
 
-      const title = document.createElement("div");
-      title.className = "cm-title";
-      title.textContent = "Crop";
+    const title = document.createElement("div");
+    title.className = "cm-title";
+    title.textContent = "Crop";
 
-      const nextBtn = document.createElement("button");
-      nextBtn.type = "button";
-      nextBtn.className = "cm-next";
-      nextBtn.textContent = "Next";
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "cm-next";
+    nextBtn.textContent = "Next";
 
-      head.append(backBtn, title, nextBtn);
+    head.append(backBtn, title, nextBtn);
 
-      // Body / Stage
-      const body  = document.createElement("div");
-      body.className = "cm-body";
-      const stage = document.createElement("div");
-      stage.className = "cm-stage";
+    // Body / Stage
+    const body  = document.createElement("div");
+    body.className = "cm-body";
+    const stage = document.createElement("div");
+    stage.className = "cm-stage";
 
-      // Canvas (alpha:true for transparent export)
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { alpha: true });
-      const overlay = document.createElement("div");
-      overlay.className = "crop-overlay";
-      stage.append(canvas, overlay);
-      body.append(stage);
+    // Canvas
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { alpha: true });
+    const overlay = document.createElement("div");
+    overlay.className = "crop-overlay";
+    stage.append(canvas, overlay);
+    body.append(stage);
 
-      // Tools (inside STAGE → appear over the image box)
-      const tools = document.createElement("div");
-      tools.className = "crop-tools";
+    // Tools (inside STAGE)
+    const tools = document.createElement("div");
+    tools.className = "crop-tools";
 
-      // [1] Aspect Ratio
-      const ratioBtn = document.createElement("button");
-      ratioBtn.type = "button";
-      ratioBtn.className = "crop-btn";
-      ratioBtn.setAttribute("aria-label", "Aspect ratio");
-      ratioBtn.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="4" y="7" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
-          <path d="M8 7v-2M16 17v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>`;
+    // Aspect Ratio
+    const ratioBtn = document.createElement("button");
+    ratioBtn.type = "button";
+    ratioBtn.className = "crop-btn";
+    ratioBtn.dataset.role = "ratio";
+    ratioBtn.setAttribute("aria-label", "Aspect ratio");
+    ratioBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="4" y="7" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+        <path d="M8 7v-2M16 17v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>`;
 
-      const ratioMenu = document.createElement("div");
-      ratioMenu.className = "crop-menu";
-      ratioMenu.innerHTML = `
-        <button type="button" data-ar="1:1">1:1</button>
-        <button type="button" data-ar="1:2">1:2</button>`;
+    const ratioMenu = document.createElement("div");
+    ratioMenu.className = "crop-pop crop-menu";
+    ratioMenu.innerHTML = `
+      <button type="button" data-ar="1:1">1:1</button>
+      <button type="button" data-ar="1:2">1:2</button>`;
 
-      // [2] Zoom — ENABLED via slider; gestures are blocked below
-      const zoomBtn = document.createElement("button");
-      zoomBtn.type = "button";
-      zoomBtn.className = "crop-btn";
-      zoomBtn.setAttribute("aria-label", "Zoom");
-      zoomBtn.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
-          <path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          <path d="M11 8v6M8 11h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>`;
+    // Zoom
+    const zoomBtn = document.createElement("button");
+    zoomBtn.type = "button";
+    zoomBtn.className = "crop-btn";
+    zoomBtn.dataset.role = "zoom";
+    zoomBtn.setAttribute("aria-label", "Zoom");
+    zoomBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+        <path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M11 8v6M8 11h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>`;
 
-      const zoomWrap = document.createElement("div");
-      zoomWrap.className = "crop-zoom";
-      const zoomInput = document.createElement("input");
-      zoomInput.type = "range";
-      zoomInput.min = "0.5"; zoomInput.max = "4"; zoomInput.step = "0.01"; zoomInput.value = "1";
-      zoomWrap.append(zoomInput);
+    const zoomWrap = document.createElement("div");
+    zoomWrap.className = "crop-pop crop-zoom";
+    const zoomInput = document.createElement("input");
+    zoomInput.type = "range";
+    zoomInput.min = "0.5";
+    zoomInput.max = "4";
+    zoomInput.step = "0.01";
+    zoomInput.value = "1";
+    zoomWrap.append(zoomInput);
 
-      tools.append(ratioBtn, ratioMenu, zoomBtn, zoomWrap);
+    tools.append(ratioBtn, ratioMenu, zoomBtn, zoomWrap);
 
-      const globalClose = document.createElement("button");
-      globalClose.className = "im-head-close";
-      globalClose.type = "button";
-      globalClose.setAttribute("aria-label","닫기");
-      globalClose.innerHTML = '<span class="im-x"></span>';
+    const globalClose = document.createElement("button");
+    globalClose.className = "im-head-close";
+    globalClose.type = "button";
+    globalClose.setAttribute("aria-label","닫기");
+    globalClose.innerHTML = '<span class="im-x"></span>';
 
-      shell.append(head, body);
-      // tools를 stage 내부에 붙인다 → 이미지 상단에 뜸
-      stage.appendChild(tools);
-      back.append(shell, globalClose);
-      document.body.append(back);
+    shell.append(head, body);
+    stage.appendChild(tools);
+    back.append(shell, globalClose);
+    document.body.append(back);
 
-      const img = new Image();
-      img.src = url;
+    const img = new Image();
+    img.src = url;
 
-      // State
-      let ar = "1:1";
-      let tx = 0, ty = 0;
-      let isPanning = false, panStart = {x:0, y:0}, startTX = 0, startTY = 0;
-      let viewW = 0, viewH = 0;
-      let frame = null;
-      let zoom = 1;
+    // State
+    let ar = "1:1";
+    let tx = 0, ty = 0;
+    let isPanning = false, panStart = {x:0, y:0}, startTX = 0, startTY = 0;
+    let viewW = 0, viewH = 0;
+    let frame = null;
+    let zoom = 1;
+    let minCover = 1;
 
-      if ("decode" in img) {
-        img.decode().then(init).catch(() => { img.onload = init; });
-      } else {
-        img.onload = init;
+    // popover helpers
+    function openPop(which){
+      const openRatio = (which === "ratio");
+      const openZoom  = (which === "zoom");
+      ratioMenu.classList.toggle("is-open", openRatio);
+      zoomWrap.classList.toggle("is-open",  openZoom);
+      ratioBtn.classList.toggle("is-active", openRatio);
+      zoomBtn.classList.toggle("is-active",  openZoom);
+      ratioBtn.classList.toggle("is-muted", openZoom);
+      zoomBtn.classList.toggle("is-muted",  openRatio);
+    }
+    function closePops(){
+      ratioMenu.classList.remove("is-open");
+      zoomWrap.classList.remove("is-open");
+      ratioBtn.classList.remove("is-active","is-muted");
+      zoomBtn.classList.remove("is-active","is-muted");
+    }
+
+    if ("decode" in img) {
+      img.decode().then(init).catch(() => { img.onload = init; });
+    } else {
+      img.onload = init;
+    }
+
+    function init() {
+      const rect = stage.getBoundingClientRect();
+      viewW = Math.max(1, Math.floor(rect.width));
+      viewH = Math.max(1, Math.floor(rect.height));
+      canvas.width = viewW;
+      canvas.height = viewH;
+
+      frame = document.createElement("div");
+      frame.className = "crop-frame";
+      stage.appendChild(frame);
+
+      applyAspect(ar);
+      centerImage();
+      draw();
+      bindEvents();
+    }
+
+    function draw() {
+      ctx.clearRect(0,0,viewW,viewH);
+      const {fx, fy, fw, fh} = frameRect();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(fx, fy, fw, fh);
+      ctx.clip();
+
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const drawW = iw * zoom;
+      const drawH = ih * zoom;
+      const dx = Math.round(fx + tx - drawW/2 + fw/2);
+      const dy = Math.round(fy + ty - drawH/2 + fh/2);
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, dx, dy, drawW, drawH);
+      ctx.restore();
+    }
+
+    function frameRect(){
+      const r = parseAspect(ar);
+      let fw = viewW, fh = Math.round(fw * r.h / r.w);
+      if (fh > viewH) { fh = viewH; fw = Math.round(fh * r.w / r.h); }
+      const fx = Math.round((viewW - fw) / 2);
+      const fy = Math.round((viewH - fh) / 2);
+
+      if (frame) {
+        frame.style.left = `${fx}px`;
+        frame.style.top  = `${fy}px`;
+        frame.style.width = `${fw}px`;
+        frame.style.height= `${fh}px`;
       }
+      return { fx, fy, fw, fh };
+    }
 
-      function init() {
+    function parseAspect(s){
+      const [a,b] = s.split(":").map(n => Math.max(1, parseInt(n,10)||1));
+      return { w:a, h:b };
+    }
+
+    function applyAspect(next){
+      ar = next;
+      const { fw, fh } = frameRect();
+      minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
+      zoom = Math.max(minCover, zoom);
+      if (+zoomInput.value < minCover) zoomInput.value = String(minCover);
+      centerImage();
+      draw();
+    }
+
+    function centerImage(){ tx = 0; ty = 0; }
+
+    function bindEvents(){
+      // disable gesture zoom
+      const stopAll = (e)=>{ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
+      ['wheel','gesturestart','gesturechange','gestureend','touchmove'].forEach(t=>{
+        stage.addEventListener(t, stopAll, { passive:false, capture:true });
+      });
+
+      // pan
+      canvas.addEventListener("pointerdown", (e)=>{
+        isPanning = true; canvas.setPointerCapture(e.pointerId);
+        panStart = { x: e.clientX, y: e.clientY };
+        startTX = tx; startTY = ty;
+        overlay.classList.add("is-active");
+        closePops();
+      });
+      const move = (e)=>{
+        if (!isPanning) return;
+        const dx = e.clientX - panStart.x;
+        const dy = e.clientY - panStart.y;
+        tx = startTX + dx;
+        ty = startTY + dy;
+        draw();
+      };
+      const up = ()=>{
+        if (!isPanning) return;
+        isPanning = false;
+        overlay.classList.remove("is-active");
+      };
+      canvas.addEventListener("pointermove", move);
+      canvas.addEventListener("pointerup", up);
+      canvas.addEventListener("pointercancel", up);
+      canvas.addEventListener("lostpointercapture", up);
+
+      // ratio popover
+      ratioBtn.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        ratioMenu.classList.contains("is-open") ? closePops() : openPop("ratio");
+      });
+      ratioMenu.querySelectorAll("button").forEach(b=>{
+        b.addEventListener("click", ()=>{
+          applyAspect(b.dataset.ar);
+          closePops();
+        });
+      });
+
+      // zoom popover + slider
+      zoomBtn.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        zoomWrap.classList.contains("is-open") ? closePops() : openPop("zoom");
+      });
+      zoomInput.addEventListener("input", ()=>{
+        const next = Math.max(minCover, Math.min(4, parseFloat(zoomInput.value)||1));
+        setZoomAroundCenter(next);
+        requestAnimationFrame(draw);
+      });
+
+      // outside click closes popovers
+      back.addEventListener("click", (e)=>{
+        if (!tools.contains(e.target)) closePops();
+      });
+
+      // resize sync
+      const ro = new ResizeObserver(()=>{
         const rect = stage.getBoundingClientRect();
         viewW = Math.max(1, Math.floor(rect.width));
         viewH = Math.max(1, Math.floor(rect.height));
-        canvas.width = viewW;
-        canvas.height = viewH;
+        canvas.width = viewW; canvas.height = viewH;
+        frameRect(); draw();
+      });
+      ro.observe(stage);
 
-        frame = document.createElement("div");
-        frame.className = "crop-frame";
-        stage.appendChild(frame);
+      // nav
+      backBtn.addEventListener("click", async ()=>{
+        cleanup();
+        try {
+          const picked = await openGalleryPicker();
+          const again  = await openCropModal(picked);
+          resolve(again);
+        } catch { reject(new Error("cancel")); }
+      });
 
-        applyAspect(ar);
-        centerImage();
-        draw();
-        bindEvents();
-      }
+      nextBtn.addEventListener("click", async ()=>{
+        nextBtn.disabled = true;
+        title.textContent = "New post";
+        const out = await exportCroppedCanvas();
+        cleanup();
+        resolve(out);
+      });
 
-      function draw() {
-        ctx.clearRect(0,0,viewW,viewH);
+      globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
 
-        const {fx, fy, fw, fh} = frameRect();
+      // esc to close popovers (not modal)
+      const onEscPop = (e)=>{ if (e.key === "Escape") closePops(); };
+      window.addEventListener("keydown", onEscPop);
+      shell._cleanup = ()=>{ window.removeEventListener("keydown", onEscPop); ro.disconnect(); };
+    }
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(fx, fy, fw, fh);
-        ctx.clip();
+    function setZoomAroundCenter(nextScale) {
+      const cw = canvas.width, ch = canvas.height;
+      const cx = cw / 2, cy = ch / 2;
+      const s0  = zoom, tx0 = tx, ty0 = ty;
+      const wx = (cx - tx0) / s0;
+      const wy = (cy - ty0) / s0;
 
-        const iw = img.naturalWidth, ih = img.naturalHeight;
-        const drawW = iw * zoom;
-        const drawH = ih * zoom;
-        const dx = Math.round(fx + tx - drawW/2 + fw/2);
-        const dy = Math.round(fy + ty - drawH/2 + fh/2);
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(img, dx, dy, drawW, drawH);
-        ctx.restore();
-      }
+      const clamped = Math.max(minCover, Math.min(4, Number(nextScale) || 1));
+      zoom = clamped;
 
-      function frameRect(){
-        const r = parseAspect(ar);
-        let fw = viewW, fh = Math.round(fw * r.h / r.w);
-        if (fh > viewH) { fh = viewH; fw = Math.round(fh * r.w / r.h); }
-        const fx = Math.round((viewW - fw) / 2);
-        const fy = Math.round((viewH - fh) / 2);
+      tx = cx - wx * zoom;
+      ty = cy - wy * zoom;
+    }
 
-        if (frame) {
-          frame.style.left = `${fx}px`;
-          frame.style.top  = `${fy}px`;
-          frame.style.width = `${fw}px`;
-          frame.style.height= `${fh}px`;
-        }
-        return { fx, fy, fw, fh };
-      }
+    async function exportCroppedCanvas(){
+      const {fx, fy, fw, fh} = frameRect();
 
-      function parseAspect(s){
-        const [a,b] = s.split(":").map(n => Math.max(1, parseInt(n,10)||1));
-        return { w:a, h:b };
-      }
+      const scaleOut = 1080 / Math.max(fw, fh);
+      const outW = Math.round(fw * scaleOut);
+      const outH = Math.round(fh * scaleOut);
 
-      let minCover = 1;
+      const out = document.createElement("canvas");
+      out.width = outW; out.height = outH;
+      const octx = out.getContext("2d", { alpha: true });
+      octx.imageSmoothingQuality = "high";
 
-      function applyAspect(next){
-        ar = next;
-        const {fw, fh} = frameRect();
-        minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
-        zoom = Math.max(minCover, zoom);
-        centerImage();
-        draw();
-        if (zoomInput) zoomInput.value = String(Math.max(minCover, Math.min(4, zoom)));
-      }
+      const iw = img.naturalWidth * zoom * scaleOut;
+      const ih = img.naturalHeight * zoom * scaleOut;
+      const dx = (tx - (img.naturalWidth * zoom)/2 + fw/2) * scaleOut;
+      const dy = (ty - (img.naturalHeight* zoom)/2 + fh/2) * scaleOut;
 
-      function centerImage(){ tx = 0; ty = 0; }
+      octx.save();
+      octx.beginPath();
+      octx.rect(0, 0, outW, outH);
+      octx.clip();
+      // align to the crop frame
+      octx.drawImage(img, Math.round(dx - fx*scaleOut), Math.round(dy - fy*scaleOut), Math.round(iw), Math.round(ih));
+      octx.restore();
 
-      function bindEvents(){
-        // ---- Disable wheel/trackpad/pinch zoom (gestures) ----
-        const stopAll = (e)=>{ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
-        ['wheel','gesturestart','gesturechange','gestureend','touchmove'].forEach(t=>{
-          stage.addEventListener(t, stopAll, { passive:false, capture:true });
-        });
+      const blob = await new Promise(res=> out.toBlob(res, "image/png"));
+      return { blob, w: outW, h: outH };
+    }
 
-        // ---- Panning (kept) ----
-        canvas.addEventListener("pointerdown", (e)=>{
-          isPanning = true; canvas.setPointerCapture(e.pointerId);
-          panStart = { x: e.clientX, y: e.clientY };
-          startTX = tx; startTY = ty;
-          overlay.classList.add("is-active");
-        });
-        const move = (e)=>{
-          if (!isPanning) return;
-          const dx = e.clientX - panStart.x;
-          const dy = e.clientY - panStart.y;
-          tx = startTX + dx;
-          ty = startTY + dy;
-          draw();
-        };
-        const up = ()=>{
-          if (!isPanning) return;
-          isPanning = false;
-          overlay.classList.remove("is-active");
-        };
-        canvas.addEventListener("pointermove", move);
-        canvas.addEventListener("pointerup", up);
-        canvas.addEventListener("pointercancel", up);
-        canvas.addEventListener("lostpointercapture", up);
+    function cleanup(){
+      try { URL.revokeObjectURL(url); } catch {}
+      try { shell._cleanup?.(); } catch {}
+      back.remove();
+      document.body.classList.remove("is-cropping");
+    }
 
-        // ---- Zoom UI (button + slider) ----
-        zoomBtn.addEventListener("click", (e)=>{
-          e.stopPropagation();
-          // Toggle slider; absolute UI so it never changes stage/canvas size
-          zoomWrap.style.display = "block";
-          zoomWrap.style.visibility =
-            zoomWrap.style.visibility === "hidden" ? "visible" : "hidden";
-          requestAnimationFrame(draw);
-        });
-        zoomInput.addEventListener("input", () => {
-          const target = Math.max(minCover, Math.min(4, parseFloat(zoomInput.value) || 1));
-          setZoomAroundCenter(target);
-          // ✅ 내부 상태 갱신 뒤 반드시 다시 그리기
-          requestAnimationFrame(draw);
-        });
-
-        // ---- Aspect ratio UI ----
-        ratioBtn.addEventListener("click",(e)=>{
-          e.stopPropagation();
-          ratioMenu.style.display = ratioMenu.style.display === "block" ? "none" : "block";
-          requestAnimationFrame(draw);
-        });
-        ratioMenu.querySelectorAll("button").forEach(b=>{
-          b.addEventListener("click",()=>{
-            applyAspect(b.dataset.ar);
-            ratioMenu.style.display = "none";
-          });
-        });
-        back.addEventListener("click", (e)=>{
-          if (!tools.contains(e.target)) { ratioMenu.style.display = "none"; zoomWrap.style.display = "none"; }
-        });
-
-        // Keep canvas size in sync
-        const ro = new ResizeObserver(()=>{
-          const rect = stage.getBoundingClientRect();
-          viewW = Math.max(1, Math.floor(rect.width));
-          viewH = Math.max(1, Math.floor(rect.height));
-          canvas.width = viewW; canvas.height = viewH;
-          frameRect(); draw();
-        });
-        ro.observe(stage);
-
-        // Navigation
-        backBtn.addEventListener("click", async ()=>{
-          cleanup();
-          try {
-            const picked = await openGalleryPicker();
-            const again  = await openCropModal(picked);
-            resolve(again);
-          } catch { reject(new Error("cancel")); }
-        });
-
-        nextBtn.addEventListener("click", async ()=>{
-          nextBtn.disabled = true;
-          title.textContent = "New post";
-          const out = await exportCroppedCanvas();
-          cleanup();
-          resolve(out);
-        });
-
-        globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
-      }
-
-      // 존재하는 state 대신 모듈 변수(zoom, tx, ty) 사용
-      function setZoomAroundCenter(nextScale) {
-        const cw = canvas.width, ch = canvas.height;
-        const cx = cw / 2, cy = ch / 2;
-
-        // 현재 값 읽기
-        const s0  = zoom;
-        const tx0 = tx;
-        const ty0 = ty;
-
-        // 현재 화면 중심이 가리키는 월드 좌표(이미지 좌표)
-        const wx = (cx - tx0) / s0;
-        const wy = (cy - ty0) / s0;
-
-        // 스케일 갱신 (범위 보정)
-        const clamped = Math.max(minCover, Math.min(4, Number(nextScale) || 1));
-        zoom = clamped;
-
-        // 같은 월드점이 화면 중심에 남도록 pan 재계산
-        tx = cx - wx * zoom;
-        ty = cy - wy * zoom;
-      }
-
-      async function exportCroppedCanvas(){
-        const {fx, fy, fw, fh} = frameRect();
-
-        const scaleOut = 1080 / Math.max(fw, fh);
-        const outW = Math.round(fw * scaleOut);
-        const outH = Math.round(fh * scaleOut);
-
-        const out = document.createElement("canvas");
-        out.width = outW; out.height = outH;
-        const octx = out.getContext("2d", { alpha: true });
-        octx.imageSmoothingQuality = "high";
-
-        const iw = img.naturalWidth * zoom * scaleOut;
-        const ih = img.naturalHeight * zoom * scaleOut;
-        const dx = (tx - (img.naturalWidth * zoom)/2 + fw/2) * scaleOut;
-        const dy = (ty - (img.naturalHeight* zoom)/2 + fh/2) * scaleOut;
-
-        octx.save();
-        octx.beginPath(); octx.rect(0, 0, outW, outH); octx.clip();
-        octx.drawImage(img, Math.round(dx), Math.round(dy), Math.round(iw), Math.round(ih));
-        octx.restore();
-
-        const blob = await new Promise(res=> out.toBlob(b=>res(b), "image/png", 0.95));
-        return { blob, w: outW, h: outH };
-      }
-
-      function cleanup(){
-        try { URL.revokeObjectURL(url); } catch {}
-        window.removeEventListener("keydown", onEsc);
-        back.remove();
-        document.body.classList.remove("is-cropping");
-      }
-
-      const onBackdropClick = (e)=>{ if (e.target === back){ cleanup(); reject(new Error("cancel")); } };
-      const onEsc = (e)=>{ if (e.key === "Escape"){ cleanup(); reject(new Error("cancel")); } };
-      back.addEventListener("click", onBackdropClick);
-      window.addEventListener("keydown", onEsc);
-    });
-  }
-
+    // close modal on backdrop / ESC
+    const onBackdropClick = (e)=>{ if (e.target === back){ cleanup(); reject(new Error("cancel")); } };
+    const onEsc = (e)=>{ if (e.key === "Escape"){ cleanup(); reject(new Error("cancel")); } };
+    back.addEventListener("click", onBackdropClick);
+    window.addEventListener("keydown", onEsc, { once:true });
+  });
+}
 
   // 🔁 3-스텝 흐름: Gallery → Crop → Compose (← 뒤로가면 한 스텝씩 복귀)
   async function runThreeStepFlow(){
