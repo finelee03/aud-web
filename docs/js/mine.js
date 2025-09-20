@@ -1108,8 +1108,6 @@
       wrap.innerHTML = cardHTML(_it);
       const card = wrap.firstElementChild;
 
-      assertNoAuthorInGrid(card);
-
       // caption 텍스트 주입 (버그 수정: card 참조 순서)
       const cap = card.querySelector('[data-caption]');
       if (cap) cap.textContent = String(it.caption || it.text || "");
