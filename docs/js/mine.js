@@ -10,11 +10,7 @@
   try {
     window.CSS = window.CSS || {};
     if (typeof window.CSS.escape !== "function") {
-      window.CSS.escape = (v) =>
-        String(v).replace(/[^a-zA-Z0-9_\u00A0-\uFFFF-]/g, ch => {
-          const cp = ch.codePointAt(0).toString(16).toUpperCase();
-          return "\\" + cp + " ";
-        });
+      window.CSS.escape = (v) => String(v).replace(/["\\]/g, "\\$&");
     }
   } catch {}
 
@@ -266,7 +262,6 @@
     return { resolve, wire, install, svgPlaceholder, fromUserObject };
   })();
 
-
   // -- me.html에서 저장한 프로필 캐시 읽기 (session/local 중 최신 rev)
   function readProfileCache() {
     let a = null, b = null;
@@ -347,7 +342,7 @@
   function createMedia(src, speed = 1, opts = { lazy: true }) {
     if (!src) return document.createComment("no-media");
     const isVideo = /\.mp4(\?|$)/i.test(src);
-    const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
     if (!isVideo) {
       const img = document.createElement("img");
       img.src = src;
@@ -360,29 +355,14 @@
 
     const mountVideo = () => {
       const v = document.createElement("video");
-      v.autoplay   = !reduceMotion;
-      v.muted      = true;
-      v.loop       = !reduceMotion;
-      v.playsInline= true;
-      v.preload    = "metadata";
-      v.tabIndex   = -1;
-      v.className  = "media-fill";
-      v.src        = src;
+      v.autoplay = true; v.muted = true; v.loop = true; v.playsInline = true;
+      v.preload = "metadata";
+      v.tabIndex = -1;
+      v.className = "media-fill";
+      v.src = src;
       v.style.pointerEvents = "none";
       v.addEventListener("loadedmetadata", () => { try { v.playbackRate = speed; } catch {} });
-      if (!reduceMotion) v.addEventListener("loadeddata", () => v.play().catch(()=>{}), { once: true });
-
-      // 화면 밖으로 나가면 일시정지 / 들어오면 재생
-      if ("IntersectionObserver" in window) {
-        const io2 = new IntersectionObserver((ents) => {
-          const vis = ents.some(e => e.isIntersecting);
-          if (reduceMotion) { v.pause(); return; }
-          if (!vis) { try { v.pause(); } catch {} }
-          else { v.play().catch(()=>{}); }
-        }, { rootMargin: "100px", threshold: 0.01 });
-        // 비디오가 DOM에 붙은 뒤 관찰
-        queueMicrotask(() => io2.observe(v));
-      }
+      v.addEventListener("loadeddata", () => v.play().catch(()=>{}), { once: true });
       return v;
     };
 
@@ -590,154 +570,154 @@
   /* =========================================================
    * 8) FEED CORE (state, fetch, cards, like, vote)
    * ========================================================= */
-  /* === HEART UI (single source of truth) =====================================
-  * - 모든 하트는 동일 path(HEART_D) 사용
-  * - 그리드(읽기전용)는 항상 외곽선(white via currentColor)
-  * - 모달(토글)은 눌림=빨강 채움, 해제=회색 외곽선
-  * - 기존 .ico-heart 마스크 아이콘은 자동 교체
-  * ==========================================================================*/
-  (() => {
-    const HEART_RED = "#E53935";
-    // 하트 path 상수만 교체
-    const HEART_D =
-      "M12.01 6.001C6.5 1 1 8 5.782 13.001L12.011 20l6.23-7C23 8 17.5 1 12.01 6.002Z"; // ← 끝 대문자 Z(닫힘)!
+/* === HEART UI (single source of truth) =====================================
+ * - 모든 하트는 동일 path(HEART_D) 사용
+ * - 그리드(읽기전용)는 항상 외곽선(white via currentColor)
+ * - 모달(토글)은 눌림=빨강 채움, 해제=회색 외곽선
+ * - 기존 .ico-heart 마스크 아이콘은 자동 교체
+ * ==========================================================================*/
+(() => {
+  const HEART_RED = "#E53935";
+  // 하트 path 상수만 교체
+  const HEART_D =
+    "M12.01 6.001C6.5 1 1 8 5.782 13.001L12.011 20l6.23-7C23 8 17.5 1 12.01 6.002Z"; // ← 끝 대문자 Z(닫힘)!
 
-    function makeSVG() {
-      const svg  = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("viewBox", "0 0 24 24");
-      svg.setAttribute("aria-hidden", "true");
-      svg.setAttribute("focusable", "false");
-      const path = document.createElementNS("http://www.w3.org/2000/svg","path");
-      path.setAttribute("d", HEART_D);
+  function makeSVG() {
+    const svg  = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+    path.setAttribute("d", HEART_D);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "#777");
+    path.setAttribute("stroke-width", "1.3");
+    svg.appendChild(path);
+    return svg;
+  }
+
+  // 읽기 전용(그리드) 하트: 항상 외곽선(hover-ui가 color: #fff → stroke=currentColor)
+  function paintReadOnly(svgOrBtn){
+    const svg  = (svgOrBtn instanceof SVGSVGElement) ? svgOrBtn
+               : svgOrBtn?.querySelector?.("svg") || svgOrBtn;
+    const path = svg?.querySelector?.("path"); if (!path) return;
+    path.setAttribute("d", HEART_D);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "1.5");
+    path.style.setProperty("fill","none","important");
+    path.style.setProperty("stroke","currentColor","important");
+    path.style.setProperty("stroke-width","1.5","important");
+  }
+
+  // 토글(모달) 하트: pressed=true → 빨강 채움 / false → 회색 외곽선
+  function setHeartVisual(target, pressed){
+    const svg  = (target instanceof SVGSVGElement) ? target
+               : target?.querySelector?.("svg") || target;
+    const path = svg?.querySelector?.("path");
+    const btn  = (target instanceof SVGSVGElement) ? target.closest?.(".btn-like") : target;
+    if (btn) {
+      btn.classList.toggle("is-liked", !!pressed);
+      btn.setAttribute("aria-pressed", String(!!pressed));
+    }
+    if (!path) return;
+
+    // 그리드의 읽기전용 하트는 언제나 외곽선 고정
+    if (svg.closest?.('.stat[data-like-readonly]')) {
+      paintReadOnly(svg);
+      return;
+    }
+
+    path.setAttribute("d", HEART_D);
+    if (pressed) {
+      path.style.setProperty("fill", HEART_RED, "important");
+      path.style.setProperty("stroke", HEART_RED, "important");
+      path.style.setProperty("stroke-width", "0", "important");
+      path.setAttribute("fill", HEART_RED);
+      path.setAttribute("stroke", HEART_RED);
+      path.setAttribute("stroke-width", "0");
+    } else {
+      path.style.setProperty("fill", "none", "important");
+      path.style.setProperty("stroke", "#777", "important");
+      path.style.setProperty("stroke-width", "1.5", "important");
       path.setAttribute("fill", "none");
       path.setAttribute("stroke", "#777");
-      path.setAttribute("stroke-width", "1.3");
-      svg.appendChild(path);
-      return svg;
-    }
-
-    // 읽기 전용(그리드) 하트: 항상 외곽선(hover-ui가 color: #fff → stroke=currentColor)
-    function paintReadOnly(svgOrBtn){
-      const svg  = (svgOrBtn instanceof SVGSVGElement) ? svgOrBtn
-                : svgOrBtn?.querySelector?.("svg") || svgOrBtn;
-      const path = svg?.querySelector?.("path"); if (!path) return;
-      path.setAttribute("d", HEART_D);
-      path.setAttribute("fill", "none");
-      path.setAttribute("stroke", "currentColor");
       path.setAttribute("stroke-width", "1.5");
-      path.style.setProperty("fill","none","important");
-      path.style.setProperty("stroke","currentColor","important");
-      path.style.setProperty("stroke-width","1.5","important");
     }
 
-    // 토글(모달) 하트: pressed=true → 빨강 채움 / false → 회색 외곽선
-    function setHeartVisual(target, pressed){
-      const svg  = (target instanceof SVGSVGElement) ? target
-                : target?.querySelector?.("svg") || target;
-      const path = svg?.querySelector?.("path");
-      const btn  = (target instanceof SVGSVGElement) ? target.closest?.(".btn-like") : target;
-      if (btn) {
-        btn.classList.toggle("is-liked", !!pressed);
-        btn.setAttribute("aria-pressed", String(!!pressed));
-      }
-      if (!path) return;
+  try {
+    if (!pressed && path && path.isConnected) {
+      const p2 = path.cloneNode(true);
+      path.replaceWith(p2);
+    }
+  } catch {}
+  }
 
-      // 그리드의 읽기전용 하트는 언제나 외곽선 고정
-      if (svg.closest?.('.stat[data-like-readonly]')) {
-        paintReadOnly(svg);
-        return;
-      }
+  // 문서(또는 컨테이너) 내 아이콘 업그레이드: .ico-heart → SVG 교체
+  function upgradeHeartIconIn(root = document) {
+    const rootNode = root || document;
 
-      path.setAttribute("d", HEART_D);
-      if (pressed) {
-        path.style.setProperty("fill", HEART_RED, "important");
-        path.style.setProperty("stroke", HEART_RED, "important");
-        path.style.setProperty("stroke-width", "0", "important");
-        path.setAttribute("fill", HEART_RED);
-        path.setAttribute("stroke", HEART_RED);
-        path.setAttribute("stroke-width", "0");
-      } else {
-        path.style.setProperty("fill", "none", "important");
-        path.style.setProperty("stroke", "#777", "important");
-        path.style.setProperty("stroke-width", "1.5", "important");
-        path.setAttribute("fill", "none");
-        path.setAttribute("stroke", "#777");
-        path.setAttribute("stroke-width", "1.5");
+    // 모달(토글) 버튼
+    rootNode.querySelectorAll(".btn-like").forEach((btn) => {
+      let svg = btn.querySelector("svg");
+      if (!svg) {
+        const repl = btn.querySelector(".ico-heart");
+        svg = makeSVG();
+        if (repl) repl.replaceWith(svg); else btn.prepend(svg);
       }
+      const pressed =
+        btn.getAttribute("aria-pressed") === "true" ||
+        btn.classList.contains("is-liked");
+      setHeartVisual(btn, pressed);
+    });
 
+    // 그리드(읽기전용) 카운터
+    rootNode.querySelectorAll(".stat[data-like-readonly]").forEach((stat) => {
+      let svg = stat.querySelector("svg");
+      if (!svg) {
+        const repl = stat.querySelector(".ico-heart");
+        svg = makeSVG();
+        if (repl) repl.replaceWith(svg); else stat.prepend(svg);
+      }
+      paintReadOnly(svg);
+    });
+  }
+
+  // 충돌 방지용 최소 CSS 주입(동일 출처 시트 있으면 거기에, 없으면 <style>)
+  function ensureHeartCSS(){
+    if (ensureHeartCSS.__done) return; ensureHeartCSS.__done = true;
+    function writable(s){ try{ if (s.href) { const u = new URL(s.href, location.href); if (u.origin !== location.origin) return false; } void s.cssRules; return true; } catch { return false; } }
+    let sheet = null;
     try {
-      if (!pressed && path && path.isConnected) {
-        const p2 = path.cloneNode(true);
-        path.replaceWith(p2);
-      }
+      const list = Array.from(document.styleSheets || []);
+      sheet = list.find(s => writable(s) && /\/mine\.css(\?|$)/.test(s.href || "")) ||
+              list.find(s => writable(s)) || null;
     } catch {}
+    if (!sheet) {
+      const tag = document.createElement("style");
+      tag.id = "mine-heart-rules";
+      document.head.appendChild(tag);
+      sheet = tag.sheet;
     }
+    const add = (r) => { try { sheet.insertRule(r, sheet.cssRules.length); } catch {} };
 
-    // 문서(또는 컨테이너) 내 아이콘 업그레이드: .ico-heart → SVG 교체
-    function upgradeHeartIconIn(root = document) {
-      const rootNode = root || document;
+    add(`.btn-like .ico-heart{ display:none !important; }`);
+    add(`.sticky-foot .btn-like{ min-width:max(44px,28px); min-height:max(44px,28px); padding:6px; line-height:0; -webkit-tap-highlight-color:transparent; }`);
+    add(`.sticky-foot .btn-like svg{ width:28px !important; height:28px !important; display:block; }`);
+    add(`.sticky-foot .btn-like svg path, .feed-card .hover-ui .stat svg path{
+      transition: fill .15s, stroke .15s;
+      stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke;
+    }`);
+    add(`.post-modal .sticky-foot, .post-modal .sticky-foot *, .sticky-foot .btn-like, .sticky-foot .btn-like svg, .sticky-foot .btn-like svg path{
+      filter:none !important; mix-blend-mode:normal !important; opacity:1 !important;
+    }`);
+  }
 
-      // 모달(토글) 버튼
-      rootNode.querySelectorAll(".btn-like").forEach((btn) => {
-        let svg = btn.querySelector("svg");
-        if (!svg) {
-          const repl = btn.querySelector(".ico-heart");
-          svg = makeSVG();
-          if (repl) repl.replaceWith(svg); else btn.prepend(svg);
-        }
-        const pressed =
-          btn.getAttribute("aria-pressed") === "true" ||
-          btn.classList.contains("is-liked");
-        setHeartVisual(btn, pressed);
-      });
-
-      // 그리드(읽기전용) 카운터
-      rootNode.querySelectorAll(".stat[data-like-readonly]").forEach((stat) => {
-        let svg = stat.querySelector("svg");
-        if (!svg) {
-          const repl = stat.querySelector(".ico-heart");
-          svg = makeSVG();
-          if (repl) repl.replaceWith(svg); else stat.prepend(svg);
-        }
-        paintReadOnly(svg);
-      });
-    }
-
-    // 충돌 방지용 최소 CSS 주입(동일 출처 시트 있으면 거기에, 없으면 <style>)
-    function ensureHeartCSS(){
-      if (ensureHeartCSS.__done) return; ensureHeartCSS.__done = true;
-      function writable(s){ try{ if (s.href) { const u = new URL(s.href, location.href); if (u.origin !== location.origin) return false; } void s.cssRules; return true; } catch { return false; } }
-      let sheet = null;
-      try {
-        const list = Array.from(document.styleSheets || []);
-        sheet = list.find(s => writable(s) && /\/mine\.css(\?|$)/.test(s.href || "")) ||
-                list.find(s => writable(s)) || null;
-      } catch {}
-      if (!sheet) {
-        const tag = document.createElement("style");
-        tag.id = "mine-heart-rules";
-        document.head.appendChild(tag);
-        sheet = tag.sheet;
-      }
-      const add = (r) => { try { sheet.insertRule(r, sheet.cssRules.length); } catch {} };
-
-      add(`.btn-like .ico-heart{ display:none !important; }`);
-      add(`.sticky-foot .btn-like{ min-width:max(44px,28px); min-height:max(44px,28px); padding:6px; line-height:0; -webkit-tap-highlight-color:transparent; }`);
-      add(`.sticky-foot .btn-like svg{ width:28px !important; height:28px !important; display:block; }`);
-      add(`.sticky-foot .btn-like svg path, .feed-card .hover-ui .stat svg path{
-        transition: fill .15s, stroke .15s;
-        stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke;
-      }`);
-      add(`.post-modal .sticky-foot, .post-modal .sticky-foot *, .sticky-foot .btn-like, .sticky-foot .btn-like svg, .sticky-foot .btn-like svg path{
-        filter:none !important; mix-blend-mode:normal !important; opacity:1 !important;
-      }`);
-    }
-
-    // 전역 노출(다른 코드에서 호출)
-    window.setHeartVisual = setHeartVisual;
-    window.upgradeHeartIconIn = upgradeHeartIconIn;
-    window.ensureHeartCSS = ensureHeartCSS;
-  })();
+  // 전역 노출(다른 코드에서 호출)
+  window.setHeartVisual = setHeartVisual;
+  window.upgradeHeartIconIn = upgradeHeartIconIn;
+  window.ensureHeartCSS = ensureHeartCSS;
+})();
 
   // 숫자 압축 표기 (15K, 2.1M 등). 미지원 환경이면 원본 출력
   const fmtCount = (n) => {
@@ -815,50 +795,6 @@
     idxById: new Map()
   };
 
-    function ensureFeedCropObserver(){
-    if (ensureFeedCropObserver.__obs) return;
-    const obs = new MutationObserver((muts) => {
-      for (const m of muts){
-        for (const n of m.addedNodes || []){
-          if (n instanceof Element && n.matches?.(".feed-card")) {
-            if (!n.__cropApplied) { n.__cropApplied = true; applyFeedCrop(n); }
-          } else if (n instanceof Element) {
-            n.querySelectorAll?.(".feed-card").forEach(card => {
-              if (!card.__cropApplied) { card.__cropApplied = true; applyFeedCrop(card); }
-            });
-          }
-        }
-      }
-    });
-    obs.observe(document.body || document.documentElement, { childList:true, subtree:true });
-    ensureFeedCropObserver.__obs = obs;
-  }
-
-  // === [ADD] feed 이미지 프레이밍 적용 함수 ===
-  function applyFeedCrop(card){
-    try {
-      const box = card.querySelector(".pm-left .media") || card.querySelector(".media");
-      const img = box?.querySelector("img");
-      if (!box || !img) return;
-
-      const fit   = (box.dataset.fit || "cover").trim();
-      const fx    = Math.max(0, Math.min(100, Number(box.dataset.fx ?? 50)));
-      const fy    = Math.max(0, Math.min(100, Number(box.dataset.fy ?? 50)));
-      const zoom  = Math.max(1.0, Math.min(3.0, Number(box.dataset.zoom ?? 1)));
-
-      // 컨테이너가 잘라주는 역할
-      box.style.overflow = "hidden";
-
-      // 이미지에 프레이밍 적용
-      img.style.width  = "100%";
-      img.style.height = "100%";
-      img.style.objectFit       = fit;                    // cover | contain
-      img.style.objectPosition  = `${fx}% ${fy}%`;        // 포커스
-      img.style.transform       = `scale(${zoom})`;       // 확대
-      img.style.transformOrigin = `${fx}% ${fy}%`;        // 확대 기준점
-    } catch {}
-  }
-
 
   // --- RANDOMIZE util (Fisher–Yates) ---
   function shuffleInPlace(arr){
@@ -869,9 +805,9 @@
     return arr;
   }
 
-  async function api(path, opt = {}) {
+  async function api(path, opt={}) {
     const fn = window.auth?.apiFetch || fetch;
-    return fn(toAPI(path), opt);
+    return fn(path, opt);
   }
 
   // === Like endpoint resolver (gallery 우선, 실패 시 items로 1회 폴백; 메서드 폴백은 POST {like}) ===
@@ -882,8 +818,7 @@
   const fmtDate = (ts) => {
     try {
       const d = new Date(Number(ts) || Date.now());
-      const loc = (navigator && navigator.language) ? navigator.language : 'en-US';
-      return d.toLocaleDateString(loc, { year:"numeric", month:"short", day:"2-digit" });
+      return d.toLocaleDateString(undefined, { year:"numeric", month:"short", day:"2-digit" });
     } catch { return ""; }
   };
 
@@ -935,24 +870,6 @@
     const liked = !!item.liked;
     const likes = Number(item.likes || 0);
     const safeLabel = (item.label || '').replace(/[^\w-]+/g, '');
-    // [ADD] 크롭 메타 안전 추출
-    const meta = (() => {
-      const fit    = (item.fit || item.object_fit || "cover").trim();
-      const focusX = Number(item.focusX ?? item.focus_x ?? 50);
-      const focusY = Number(item.focusY ?? item.focus_y ?? 50);
-      const zoom   = Number(item.zoom   ?? 1.0);
-      try {
-        const c = typeof item.crop === "string" ? JSON.parse(item.crop)
-                  : (typeof item.crop === "object" && item.crop) ? item.crop : null;
-        if (c) return {
-          fit:    (c.fit || fit),
-          focusX: Number(c.focusX ?? focusX),
-          focusY: Number(c.focusY ?? focusY),
-          zoom:   Number(c.zoom   ?? zoom),
-        };
-      } catch {}
-      return { fit, focusX, focusY, zoom };
-    })();
 
     // 소유자 판정 (isMine(item) 있으면 우선; 없으면 id 비교)
     const mine = isMine(item);
@@ -960,10 +877,6 @@
     return `
     <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
       <div class="media">
-           data-fit="${meta.fit}"
-           data-fx="${meta.focusX}"
-           data-fy="${meta.focusY}"
-           data-zoom="${meta.zoom}">
         <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
         <div class="hover-ui" role="group" aria-label="Post actions">
           <div class="actions">
@@ -1188,7 +1101,10 @@
   const api = (p,o)=> (window.auth?.apiFetch ? window.auth.apiFetch(p,o) : fetch(p,o));
   const withCSRF = window.withCSRF || (async (opt)=>opt);
 
-  const getNS = (window.getNS ? window.getNS : ()=>'default');
+  function getNS(){
+    try { return (localStorage.getItem('auth:userns') || 'default').trim().toLowerCase(); }
+    catch { return 'default'; }
+  }
 
   // 🔗 상단 전역 setHeartVisual만 호출 (없으면 안전 폴백)
   const hv = (target, pressed) => {
@@ -1295,7 +1211,7 @@
       } else {
         document
           .querySelectorAll(`.feed-card[data-id="${CSS.escape(String(id))}"]`)
-          .forEach(card => { writeInto(card, st.liked, st.likes); });
+          .forEach(card => { __writeLikeCountInto(card, st.likes); writeInto(card, st.liked, st.likes); });
       }
     };
     (window.requestAnimationFrame || setTimeout)(run);
@@ -1331,15 +1247,12 @@
         : prevLiked;
       const nextLikes = (typeof likes === 'number') ? likes : (STATE.get(id)?.likes ?? null);
       commit(id, nextLiked, nextLikes);
-      // 캐시/스토어에도 최신 count 반영
-      if (typeof likes === 'number') { try { window.setLikeCountOnly?.(id, likes); } catch {} }
-      // liked 플래그를 서버가 명시한 경우 의도 캐시 동기화
-      if (liked != null) { try { window.setLikeIntent?.(id, liked, (typeof likes==='number'? likes : undefined)); } catch {} }
+
       if (typeof likes !== 'number') {
         throttleFetchLikes(id, ns);
       }
 
-      try { window.setLikeIntent?.(id, nextLiked, nextLikes); } catch {}
+      try { if (isMineEvent) LikeCache?.set?.(viewerNS(), id, nextLiked, nextLikes); } catch {}
     } catch {}
   };
 
@@ -1402,7 +1315,7 @@
           // liked는 내 계정 상태와 분리되므로 덮어쓰지 않고, '개수'만 권위값으로 반영
           commit(id, /*liked*/ null, /*likes*/ snap.likes);
           // 로컬 캐시도 개수만 갱신(계정 분리 유지)
-          try { window.setLikeCountOnly?.(id, snap.likes); } catch {}
+          try { LikeCache?.set?.(viewerNS(), id, (STATE.get(id)?.liked ?? null), snap.likes); } catch {}
         }
       } catch {}
     }, 250);
@@ -1956,7 +1869,6 @@
       countsById.set(String(item.id), counts);
       myById.set(String(item.id), my);
       uiUpdate(container, counts, my);
-      try { window.applyItemVoteCounts?.(counts); } catch {}
 
       if (!container.__bound) {
         container.__bound = true;
@@ -1980,7 +1892,7 @@
             countsById.set(id, counts);
             updateEverywhere(id, counts, null);
             bcNotifySelf("self:vote", { id, ns, choice: null, counts });
-            try { window.addLabelVoteDelta?.(lb, -1); } catch {}
+
 
             const res = await unvote(id, ns);
             if (res.counts) { countsById.set(id, res.counts); myById.set(id, res.my); updateEverywhere(id, res.counts, res.my); }
@@ -1991,10 +1903,6 @@
             countsById.set(id, counts);
             updateEverywhere(id, counts, lb);
             bcNotifySelf("self:vote", { id, ns, choice: lb, counts });
-            try {
-              if (prevMy) window.addLabelVoteDelta?.(prevMy, -1);
-              window.addLabelVoteDelta?.(lb, +1);
-            } catch {}
 
             const res = await castVote(id, lb, ns);
             if (res.counts) { countsById.set(id, res.counts); myById.set(id, res.my); updateEverywhere(id, res.counts, res.my); }
@@ -2002,10 +1910,6 @@
               const back = await fetchVotes(id, ns);
               countsById.set(id, back.counts); myById.set(id, back.my);
               updateEverywhere(id, back.counts, back.my);
-            try {
-              const fixed = (res && res.counts) ? res.counts : null;
-              if (fixed) window.setLabelVotesMap?.(fixed); // 서버 스냅샷으로 덮어쓰기
-            } catch {}
             }
           }
 
@@ -2155,17 +2059,6 @@
     if (!ids.length || !__sock) return;
     __sock.emit("unsubscribe", { items: ids });
   }
-
-  window.addEventListener('beforeunload', () => {
-    try { if (__io) { __io.disconnect(); __io = null; } } catch {}
-    try { if (__sock && typeof __sock.close === 'function') { __sock.close(); } } catch {}
-    try {
-      if (observeAvatars.__obs && typeof observeAvatars.__obs.disconnect === 'function') {
-        observeAvatars.__obs.disconnect();
-        observeAvatars.__obs = null;
-      }
-    } catch {}
-  });
 
 
   /* =========================================================
@@ -2343,7 +2236,6 @@
     initTabs();
     renderTabsOnly();
     bindEvents();
-    ensureFeedCropObserver();
 
     const flagged = hasAuthedFlag();
 
@@ -2401,17 +2293,6 @@
 
   });
 
-  (function ensureA11y(){
-    const root = document;
-    const set = (scope=root) => {
-      scope.querySelectorAll('.likes-line:not([aria-live])').forEach(el => {
-        el.setAttribute('aria-live','polite');
-      });
-    };
-    set(); // 최초 1회
-    try { window.__hookA11yLikes = set; } catch {}
-  })();
-
   /* =========================================================
    * 11) POST MODAL (카드 크게 보기)
    * ========================================================= */
@@ -2438,26 +2319,6 @@
 
     let modal, sheet, content, btnClose, btnPrev, btnNext;
     let currentIndex = -1;
-    let prevFocus = null;
-    let untrapFocus = null;
-
-    function trapFocus(scope){
-      function onKey(e){
-        if (e.key !== 'Tab') return;
-        const focusables = Array.from(
-          scope.querySelectorAll('a,button,input,select,textarea,[tabindex]')
-        ).filter(el => !el.disabled && el.tabIndex !== -1 && el.offsetParent !== null);
-        if (!focusables.length) return;
-
-        const first = focusables[0];
-        const last  = focusables[focusables.length - 1];
-
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-      }
-      scope.addEventListener('keydown', onKey);
-      return () => scope.removeEventListener('keydown', onKey);
-    }
 
     function inject(){
       if ($("#post-modal")) return;
@@ -2551,8 +2412,7 @@
         head.insertBefore(btnDel, btnClose || null);
 
         // 클릭 → 확인 → 낙관적 제거 → 서버 삭제 → 브로드캐스트
-        if (!btnDel.__bound) btnDel.addEventListener('click', async () => {
-          btnDel.__bound = true;
+        btnDel.addEventListener('click', async () => {
           const id = String(item.id);
           const ns = nsOf(item);
           const ok = confirm('이 게시물을 삭제할까요? 이 작업은 되돌릴 수 없습니다.');
@@ -2610,42 +2470,14 @@
         ? profSnap.avatarUrl
         : Avatar.fromUserObject(item?.user);
       const avatar = Avatar.resolve(avatarSrc, name);
-
-      const meta = (() => {
-        // 1) 우선순위: 단일 필드
-        const fit    = (item.fit || item.object_fit || "cover").trim();
-        const focusX = Number(item.focusX ?? item.focus_x ?? 50);
-        const focusY = Number(item.focusY ?? item.focus_y ?? 50);
-        const zoom   = Number(item.zoom   ?? 1.0);
-
-        // 2) 여분: crop JSON 문자열/객체
-        try {
-          const c = typeof item.crop === "string" ? JSON.parse(item.crop) :
-                    (typeof item.crop === "object" && item.crop) ? item.crop : null;
-          if (c) {
-            return {
-              fit:    (c.fit || fit),
-              focusX: Number(c.focusX ?? focusX),
-              focusY: Number(c.focusY ?? focusY),
-              zoom:   Number(c.zoom   ?? zoom),
-            };
-          }
-        } catch {}
-        return { fit, focusX, focusY, zoom };
-      })();
-
       return `
       <article class="feed-card pm-split" data-id="${item.id}" data-ns="${nsOf(item)}">
         <div class="pm-layout">
-        <div class="pm-left">
-          <div class="media"
-                data-fit="${meta.fit}"
-                data-fx="${meta.focusX}"
-                data-fy="${meta.focusY}"
-                data-zoom="${meta.zoom}">
-            <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
+          <div class="pm-left">
+            <div class="media">
+              <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
+            </div>
           </div>
-        </div>
 
           <aside class="pm-right">
             <header class="pm-right-head">
@@ -2743,12 +2575,12 @@
         }
       } catch {}
 
-      // 2) LikeIntent 캐시(영속)에 의한 보정
+      // 2) LikeCache(영속)로 보정
       try {
-        const rec = (typeof window.getLikeIntent === "function") ? window.getLikeIntent(String(it.id)) : null;
+        const rec = (typeof LikeCache?.get === "function") ? LikeCache.get(viewerNS(), String(it.id)) : null;
         if (rec) {
-          if (typeof rec.liked === "boolean") it.liked = rec.liked;
-          if (typeof rec.likes === "number")  it.likes = rec.likes;
+          it.liked = rec.liked;
+          if (typeof rec.likes === "number") it.likes = rec.likes;
         }
       } catch {}
       
@@ -2756,7 +2588,7 @@
 
       content.innerHTML = `<div class="pm-card">${modalSplitHTML(it)}</div>`;
       try { renderCountFromStore(it.id, content); } catch {}
-      try { window.__hookA11yLikes?.(content); } catch {}
+
       try { BG.apply([it]); } catch {}
       const hex = pickBgHex(it);
       if (hex) {
@@ -2767,7 +2599,6 @@
       }
 
       const art = content.querySelector(".feed-card");
-      try { window.__hookA11yLikes?.(art); } catch {}
 
       try { upgradeHeartIconIn(art); Avatar.install(art); } catch {}
       // 내 글이면 캐시로 강제 동기화(이름/아바타/데이터-id)
@@ -2840,11 +2671,8 @@
       const it = FEED.items[idx];
       if (it?.id) subscribeItems([String(it.id)]);
       renderAt(idx);
-      prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       modal.hidden = false;
       document.documentElement.style.overflow = "hidden";
-      untrapFocus?.(); // 안전 해제
-      untrapFocus = trapFocus(sheet);
       setTimeout(() => sheet.focus?.(), 0);
     }
 
@@ -2858,46 +2686,27 @@
         if (art) {
           const id = String(art.getAttribute('data-id') || '');
           if (id) {
-            // (참고) ns는 여기서 직사용하지 않음. store.js는 id 기준으로 저장/동기화.
+            const ns = art.getAttribute('data-ns') || (typeof getNS === 'function' ? getNS() : 'default');
             const btn = art.querySelector('.btn-like');
-            const liked =
-              !!(btn && (btn.getAttribute('aria-pressed') === 'true' || btn.classList.contains('is-liked')));
-
-            // 카운트 읽기: .likes-count(모달) 우선, 없으면 [data-like-count](그리드) 사용
+            const liked = !!(btn && (btn.getAttribute('aria-pressed')==='true' || btn.classList.contains('is-liked')));
             let likes = 0;
             const elCount = art.querySelector('.likes-count') || art.querySelector('[data-like-count]');
             if (elCount) {
               likes = elCount.classList?.contains?.('likes-count')
-                ? Number(String(elCount.textContent || '0').replace(/[^\d]/g, '')) || 0
+                ? Number(String(elCount.textContent||'0').replace(/[^\d]/g,'')) || 0
                 : Number(elCount.getAttribute('data-count') || elCount.dataset?.count || 0) || 0;
             }
-            // 음수 방지
-            likes = Math.max(0, likes);
-
-            // FEED 메모리 & UI 즉시 반영
-            try { setFeedMemoryLike(id, liked, likes); } catch {}
-            try { updateLikeUIEverywhere(id, liked, likes); } catch {}
-
-            // ★ 단일 소스: store.js에 스냅샷 기록 (LikeCache 제거)
-            // setLikeIntent(id, liked, likes) 가 있으면 의도/카운트를 함께 저장
-            try { window.setLikeIntent?.(id, liked, likes); } catch {}
+            try { setFeedMemoryLike(id, liked, likes); updateLikeUIEverywhere(id, liked, likes); } catch {}
+            try { LikeCache?.set?.(viewerNS(), id, liked, likes); } catch {}
           }
         }
       } catch {}
 
       // 2) 실제로 닫기
-      untrapFocus?.(); // 포커스 트랩 해제
-      untrapFocus = null;
-
       modal.hidden = true;
       document.documentElement.style.overflow = "";
       currentIndex = -1;
       content.innerHTML = "";
-
-      if (prevFocus && typeof prevFocus.focus === 'function') {
-        try { prevFocus.focus(); } catch {}
-      }
-      prevFocus = null;
     }
 
     window.openPostModalById = openById;
@@ -2969,9 +2778,7 @@
 
       }
     });
-  } catch {
-    __bcFeed = null; // Safari 프라이빗 등: storage 폴백만 사용
-  }
+  } catch {}
 
   // === FEED → other tabs (me.html) 알림 브릿지: 내가 한 행동을 방송 ===
   function bcNotifySelf(type, data){
