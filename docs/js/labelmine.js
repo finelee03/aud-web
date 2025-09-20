@@ -2910,16 +2910,6 @@ function goMineAfterShare(label = getLabel()) {
   });
 })();
 
-  // 필요 시 외부에서 직접 호출할 수 있게 노출
-  SDF.Feed = Object.assign(SDF.Feed || {}, {
-    openFeedModal,
-    openComposeModal,
-    openGalleryPicker,
-    openCropModal,
-    runThreeStepFlow,
-    mountPostButton,
-  });
-
 
 // 만료(401) 즉시 전환
 window.addEventListener("auth:logout", ()=>{
