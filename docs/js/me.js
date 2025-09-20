@@ -7,11 +7,54 @@
   /* ─────────────────────────────────────────────────────────────────────────────
    * 0) Utilities & Globals
    * ──────────────────────────────────────────────────────────────────────────── */
+
+  const qty = (n, one, many = one + "s") => `${Number(n||0)} ${Number(n||0) === 1 ? one : many}`;
+
+  // === Watched NS (로그인 없이도 '내 글'로 간주할 네임스페이스 목록) ==================
+  const WATCHED_NS_KEY = "me:watched-ns";   // 로컬 퍼시스턴스 키
+  function readWatchedNS() {
+    try { const arr = JSON.parse(localStorage.getItem(WATCHED_NS_KEY) || "[]"); return Array.isArray(arr) ? arr.map(s=>String(s).toLowerCase()) : []; }
+    catch { return []; }
+  }
+  function writeWatchedNS(list) {
+    try { localStorage.setItem(WATCHED_NS_KEY, JSON.stringify(Array.from(new Set((list||[]).map(s=>String(s).toLowerCase()))))); } catch {}
+  }
+  function addWatchedNS(ns) { const cur = readWatchedNS(); cur.push(String(ns||"").toLowerCase()); writeWatchedNS(cur); }
+  function isOwnerWatched(ownerNS) {
+    const v = String(ownerNS||"").toLowerCase();
+    if (!v) return false;
+    const mine = (typeof window.__STORE_NS === "string" ? window.__STORE_NS.toLowerCase() : "default");
+    if (v === mine) return true;
+    return readWatchedNS().includes(v);
+  }
+
+  // 프로필 캐시/최근 로그인 정보에서 NS 추정 → 최초 1회 자동 추가(게스트 대비)
+  (function seedWatchedNSFromProfile(){
+    try {
+      const cached = (function() {
+        const keys = ["me:profile", `me:profile:${(localStorage.getItem("auth:userns")||"default").toLowerCase()}`];
+        for (const k of keys) { const v = sessionStorage.getItem(k) || localStorage.getItem(k); if (v) return JSON.parse(v); }
+        return null;
+      })();
+      const ns = (localStorage.getItem("auth:userns") || "").trim().toLowerCase();
+      if (ns) addWatchedNS(ns);
+      if (cached?.ns) addWatchedNS(String(cached.ns).toLowerCase());
+    } catch {}
+  })();
+
+  function isMineOrWatchedFromPayload(data) {
+    // mine.js에서 보내주는 payload에는 보통 owner.ns 또는 ns가 들어있음
+    const ownerNS = String(data?.owner?.ns || data?.ns || "").toLowerCase();
+    // mine:true 플래그 최우선
+    if (data?.mine === true) return true;
+    // NS 일치/감시 여부 체크
+    return isOwnerWatched(ownerNS);
+  }
+
   const $  = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   const fmtInt = (n) => {
-    try { return new Intl.NumberFormat("ko-KR").format(Number(n ?? 0)); }
+    try { return new Intl.NumberFormat("en-US").format(Number(n ?? 0)); }
     catch { return String(n ?? 0); }
   };
 
@@ -29,6 +72,65 @@
   const JIB_SYNC_KEY   = (window.JIB_SYNC_KEY   || "jib:sync");
   const EVT_LABEL      = (window.LABEL_COLLECTED_EVT || "label:collected-changed");
   const EVT_JIB        = (window.JIB_COLLECTED_EVT   || "jib:collection-changed");
+
+  let __LIKES_PREV = {};  
+  let __VOTES_PREV = {}; 
+
+  // === Backlog Queue (알림 버퍼) ==========================================
+  // OFF 상태에서 들어온 알림은 큐에 쌓아두었다가 ON으로 전환 시 재생한다.
+  const QUEUE_MAX = 200;                         // 큐 최대 길이
+  const QUEUE_TTL = 1000 * 60 * 60 * 24 * 2;     // 48시간 보관
+  const QUEUE_FLUSH_LIMIT = 50;                  // ON 전환 시 최대 재생 개수
+
+  const QUEUE_KEY = () => `notify:queue:${getNS()}`;
+
+  function readQueue() {
+    try { return JSON.parse(localStorage.getItem(QUEUE_KEY()) || "[]"); }
+    catch { return []; }
+  }
+  function writeQueue(arr) {
+    try { localStorage.setItem(QUEUE_KEY(), JSON.stringify(arr)); } catch {}
+  }
+  function enqueueNotice(n) {
+    const now = Date.now();
+    const q = readQueue().filter(it => (now - (it.ts || 0)) < QUEUE_TTL);
+    q.push({ text: n.text || "", sub: n.sub || "", tag: n.tag || "", data: n.data || null, ts: n.ts || now });
+    while (q.length > QUEUE_MAX) q.shift();
+    writeQueue(q);
+  }
+
+  // 재생 시 pushNotice가 다시 큐에 넣지 않도록 방지 플래그
+  let __replayMode = false;
+
+  async function flushQueuedNotices(limit = QUEUE_FLUSH_LIMIT) {
+    const q = readQueue();
+    if (!q.length) return 0;
+
+    const cut = Math.max(0, q.length - limit); // 오래된 것들은 남겨두고 최근 limit개만 재생
+    const recent = q.slice(cut);
+    writeQueue(q.slice(0, cut));               // 남겨둘 구간만 저장(초과분 삭제)
+
+    if (cut > 0) {
+      // 오래된 알림이 많을 땐 요약 1건 먼저
+      __replayMode = true;
+      pushNotice(`Skipped ${cut} older notifications`, `Replaying the most recent ${recent.length}.`, { tag: `replay:summary:${Date.now()}`, replay: true });
+      __replayMode = false;
+    }
+
+    for (const it of recent) {
+      __replayMode = true;
+      // tag 중복 억제를 위해 ts를 덧붙여 충돌 최소화
+      const tagWithTs = it.tag ? `${it.tag}@${it.ts}` : `replay:${it.ts}`;
+      pushNotice(it.text, it.sub, { tag: tagWithTs, data: it.data, replay: true });
+      __replayMode = false;
+      // 너무 몰아서 뜨지 않게 약간의 쉬는 시간(필요 시 조정/삭제)
+      await new Promise(r => setTimeout(r, 30));
+    }
+
+    return recent.length;
+  }
+
+
 
   // Auth helpers (no-op safe)
   const ensureCSRF = window.auth?.ensureCSRF || (async () => {});
@@ -238,7 +340,7 @@
   function writeProfileCache(detail) {
     const ns  = getNS();
     const uid = detail?.id ?? MY_UID ?? "anon";
-    const payload = JSON.stringify(detail || {});
+    const payload = JSON.stringify({ ns, ...(detail || {}) });
     const kUID = `${PROFILE_KEY_PREFIX}:${ns}:${uid}`;
     const kNS  = `${PROFILE_KEY_PREFIX}:${ns}`;
     try { sessionStorage.setItem(kUID, payload); } catch {}
@@ -506,33 +608,52 @@
   const __recentNotify = new Map(); // tag -> timestamp(ms)
   const __RECENT_TTL = 4000; // 4초 내 동일 tag 차단 (원하면 2~5초로 조절)
   function pushNotice(text, sub = "", opt = {}) {
-    // 중복 억제: tag가 있으면 TTL 체크
+    if (!__replayMode && !isNotifyOn()) {
+      try { enqueueNotice({ text, sub, tag: opt?.tag || "", data: opt?.data || null }); } catch {}
+      return;
+    }
+
+    // 중복 억제
     const tag = opt?.tag || "";
     if (tag) {
       const now = Date.now();
       const last = __recentNotify.get(tag) || 0;
-      if (now - last < __RECENT_TTL) return; // 너무 최근이면 스킵
+      if (now - last < __RECENT_TTL) return;
       __recentNotify.set(tag, now);
-      // 맵 청소 (간단)
       for (const [k, t] of __recentNotify) if (now - t > __RECENT_TTL * 4) __recentNotify.delete(k);
     }
+
     const ul = $("#notify-list");
     const empty = $("#notify-empty");
     if (!ul) return;
+
+    // ✅ DOM 안전 조립 (중복 제거/불용변수 제거)
     const li = document.createElement("li");
     li.className = "notice";
 
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
+    const row = document.createElement("div");
+    row.className = "row between";
 
-    li.innerHTML = `
-      <div class="row between">
-        <strong>${text}</strong>
-        <time class="time">${hh}:${mm}</time>
-      </div>
-      ${sub ? `<p class="sub">${sub}</p>` : ""}
-    `.trim();
+    const strong = document.createElement("strong");
+    strong.textContent = String(text || "");
+
+    const timeEl = document.createElement("time");
+    timeEl.className = "time";
+    const nowDate = new Date();
+    timeEl.dateTime = nowDate.toISOString();
+    timeEl.textContent =
+      `${String(nowDate.getHours()).padStart(2,"0")}:${String(nowDate.getMinutes()).padStart(2,"0")}`;
+
+    row.append(strong, timeEl);
+    li.append(row);
+
+    if (sub) {
+      const p = document.createElement("p");
+      p.className = "sub";
+      p.textContent = String(sub || "");
+      li.append(p);
+    }
+
     ul.prepend(li);
 
     if (empty) empty.style.display = "none";
@@ -541,42 +662,46 @@
     try { maybeNativeNotify(text, sub, { tag: opt?.tag, data: opt?.data }); } catch {}
   }
 
-  function handleFeedSelfEvent(type, data) {
-    if (!isNotifyOn()) return;
-    try {
-      if (type === "self:like") {
-        const liked = !!data?.liked;
-        const likes = Number(data?.likes || 0);
-        const txt   = liked ? "내가 게시물에 좋아요를 눌렀어요" : "좋아요를 취소했어요";
-        pushNotice(txt, `총 ${likes}개`, { tag: `self-like:${data?.id}`, data: { id: String(data?.id || "") } });
-      } else if (type === "self:vote") {
-        const choice = data?.choice;
-        const txt = choice ? "투표했어요" : "투표를 취소했어요";
-        pushNotice(txt, choice ? `#${choice}` : "", { tag: `self-vote:${data?.id}`, data: { id: String(data?.id || "") } });
-      }
-    } catch {}
-  }
-
   function setupNotifyUI() {
+    // 1) 로그인 여부 무관 기본 ON (게스트 포함) —— 토글 유무와 상관없이 먼저 실행
+    setNotifyOn(true);
+    setWantsNative(true);
+    // 권한 요청 실패해도 in-page 알림은 계속 동작하므로 await 불필요
+    ensureNativePermission();
+    ensureSocket();
+    if (isNotifyOn()) { flushQueuedNotices().catch(() => {}); }
+    // 2) 토글 UI가 있는 경우에만 동기화/이벤트 바인딩
     const tgl = $("#notify-toggle");
     if (!tgl) return;
 
+    // 중복 바인딩 가드
+    if (tgl.__bound) {
+      // 외부에서 setNotifyOn(true) 했으니, 표시만 맞춰주기
+      tgl.checked = isNotifyOn();
+      return;
+    }
+    tgl.__bound = true;
+
+    // 현재 설정 반영
     tgl.checked = isNotifyOn();
+
+    // 변경 이벤트
     tgl.addEventListener("change", async () => {
       setNotifyOn(tgl.checked);
       if (tgl.checked) {
         setWantsNative(true);
-        await ensureNativePermission();
+        await ensureNativePermission();  // 허용되면 네이티브 알림, 거부돼도 in-page 유지
         ensureSocket();
       } else {
         setWantsNative(false);
+        // 필요시 소켓 연결을 유지할지/끊을지 정책적으로 결정.
+        // "토글은 네이티브 알림만 제어하고 in-page는 항상 ON"이라면 여기서 소켓 끊지 않습니다.
       }
+      if (tgl.checked) await flushQueuedNotices();
     });
   }
 
   function ensureSocket() {
-    if (!isNotifyOn()) return null;
-
     // 1) 소켓 인스턴스 확보 (있으면 재사용, 없으면 생성)
     if (socket && socket.connected !== undefined) {
       // 이미 리스너가 붙어 있다면 그대로 반환
@@ -590,14 +715,11 @@
 
     // 2) 리스너가 중복으로 붙지 않도록 가드
     if (!socket.__meHandlersAttached) {
-      socket.__meHandlersAttached = true;
+      Object.defineProperty(socket, "__meHandlersAttached", { value: true, enumerable: false });
 
       socket.on("connect", () => {
         if (MY_ITEM_IDS.size) socket.emit("subscribe", { items: [...MY_ITEM_IDS] });
       });
-
-      // ── 도우미
-      const qty = (n, one, many = one + "s") => `${Number(n||0)} ${Number(n||0) === 1 ? one : many}`;
 
       // ── 알림 리스너들
       socket.on("item:like", (p) => {
@@ -748,7 +870,7 @@
       items.forEach((it) => {
         const nsMatch   = String(it?.ns || "").toLowerCase() === myns;
         const mineFlag  = (it?.mine === true);
-        const ownerMatch= String(it?.user?.id || "").toLowerCase() === myns; // (옵션)
+        const ownerMatch= (MY_UID != null) && (String(it?.user?.id || "").toLowerCase() === String(MY_UID).toLowerCase());
         if (nsMatch || mineFlag || ownerMatch) out.push(it);
       });
 
@@ -779,7 +901,8 @@
   const winnersOf = (counts) => {
     const entries = Object.entries(counts || {});
     if (!entries.length) return [];
-    const max = Math.max(...entries.map(([, n]) => Number(n || 0)));
+    const max = Math.max(...entries.map(([, n]) => Number(n || 0)), 0);
+    if (max <= 0) return [];
     return entries.filter(([, n]) => Number(n || 0) === max).map(([k]) => k);
   };
 
@@ -848,7 +971,7 @@
    * ──────────────────────────────────────────────────────────────────────────── */
   async function updateDisplayName(displayName) {
     const name = String(displayName || "").trim();
-    if (!name) return { ok: false, msg: "표시 이름이 비어 있습니다." };
+    if (!name) return { ok: false, msg: "Display name is required." };
 
     const jsonBody = JSON.stringify({ displayName: name, name });
     const asJson = (url, method) => ({ url, method, headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: jsonBody });
@@ -873,12 +996,12 @@
       if (!res) continue;
       if (res.ok) return { ok: true };
       if (res.status === 400 || res.status === 422) {
-        let err = "입력 형식이 올바르지 않습니다.";
+        let err = "Invalid input.";
         try { const j = await res.json(); err = j?.message || j?.error || err; } catch {}
         return { ok: false, msg: err };
       }
     }
-    return { ok: false, msg: "서버가 표시 이름 변경을 처리하지 못했습니다." };
+    return { ok: false, msg: "The server couldn’t update your display name." };
   }
 
   async function updatePassword(currentPassword, newPassword) {
@@ -905,7 +1028,7 @@
         if (r?.ok) return { ok: true };
       } catch {}
     }
-    return { ok: false, msg: "비밀번호 변경 요청이 거부되었습니다." };
+    return { ok: false, msg: "Password change request was rejected." };
   }
 
   /* ─────────────────────────────────────────────────────────────────────────────
@@ -922,7 +1045,7 @@
     wrap.setAttribute("aria-modal", "true");
     wrap.setAttribute("aria-labelledby", "edit-title");
     wrap.innerHTML = `
-      <button type="button" class="overlay" aria-label="닫기"></button>
+      <button type="button" class="overlay" aria-label="Close"></button>
       <div class="sheet" role="document" aria-labelledby="edit-title">
         <h2 id="edit-title" class="title">Edit profile</h2>
 
@@ -948,7 +1071,7 @@
               <input id="f-new" name="newPassword" type="password" autocomplete="new-password" minlength="8" />
             </div>
             <div class="form-row">
-              <label for="f-new2">Verify new password</label>
+              <label for="f-new2">Confirm new password</label>
               <input id="f-new2" name="newPassword2" type="password" autocomplete="new-password" minlength="8" />
             </div>
             <p class="hint">If you do not wish to change your password, leave it blank.</p>
@@ -986,18 +1109,18 @@
       if (nw || nw2 || cur) {
         if (!cur)          { msgEl.textContent = "Please enter your current password."; curEl?.focus(); return; }
         if (nw.length < 8) { msgEl.textContent = "Your new password must be at least 8 characters long."; nwEl?.focus(); return; }
-        if (nw !== nw2)    { msgEl.textContent = "New password verification does not match."; nw2El?.focus(); return; }
+        if (nw !== nw2)    { msgEl.textContent = "New passwords do not match."; nw2El?.focus(); return; }
       }
 
       msgEl.textContent = "Submitting…";
 
       if (displayName !== (ME_STATE.displayName || "")) {
         const r = await updateDisplayName(displayName);
-        if (!r.ok) { msgEl.textContent = r.msg || "Your name changing failed"; return; }
+        if (!r.ok) { msgEl.textContent = r.msg || "Failed to change your name."; return; }
       }
       if (nw) {
         const r2 = await updatePassword(cur, nw);
-        if (!r2.ok) { msgEl.textContent = r2.msg || "Password changing failed"; return; }
+        if (!r2.ok) { msgEl.textContent = r2.msg || "Failed to change your password."; return; }
       }
 
       ME_STATE.displayName = displayName;
@@ -1055,7 +1178,7 @@
     wrap.setAttribute("aria-modal", "true");
     wrap.setAttribute("aria-labelledby", "avatar-title");
     wrap.innerHTML = `
-      <button type="button" class="overlay" aria-label="닫기"></button>
+      <button type="button" class="overlay" aria-label="Close"></button>
       <div class="sheet" role="document">
         <h2 id="avatar-title" class="title">Change profile</h2>
 
@@ -1099,11 +1222,11 @@
     inp?.addEventListener("change", async (e) => {
       const f = e.target.files?.[0];
       if (!f) return;
-      if (!/^image\//.test(f.type)) { msg.textContent = "이미지 파일을 선택해 주세요."; return; }
+      if (!/^image\//.test(f.type)) { msg.textContent = "Please choose an image file."; return; }
       await loadImageFile(f);
       fitImage(true);
       drawCrop();
-      msg.textContent = "이미지를 드래그하여 위치를 조정하세요.";
+      msg.textContent = "Drag the image to adjust its position.";
     });
 
     zoom?.addEventListener("input", () => {
@@ -1138,21 +1261,21 @@
     wrap.querySelector("#av-reset")?.addEventListener("click", () => {
       fitImage(true);
       drawCrop();
-      msg.textContent = "초기화되었습니다.";
+      msg.textContent = "Reset.";
     });
 
     wrap.querySelector("#av-save")?.addEventListener("click", async () => {
-      msg.textContent = "업로드 중…";
+      msg.textContent = "Uploading…";
       const blob = await exportCroppedBlob(512);
       const r = await uploadAvatar(blob);
       if (r?.ok) {
         ME_STATE.avatarUrl = r.url || "";
         renderProfile({ displayName: ME_STATE.displayName, email: ME_STATE.email, avatarUrl: r.url });
         await broadcastMyProfile({ avatarUrl: r.url });
-        msg.textContent = "저장되었습니다.";
+        msg.textContent = "Saved.";
         setTimeout(closeAvatarCropper, 350);
       } else {
-        msg.textContent = r?.msg || "업로드에 실패했습니다.";
+        msg.textContent = r?.msg || "Upload failed.";
       }
     });
 
@@ -1278,7 +1401,7 @@
   }
 
   async function uploadAvatar(blob) {
-    if (!blob) return { ok: false, msg: "내보낼 이미지가 없습니다." };
+    if (!blob) return { ok: false, msg: "There’s no image to export." };
     await ensureCSRF();
     const fd = new FormData();
     fd.append("avatar", blob, "avatar.webp");
@@ -1286,10 +1409,10 @@
     try {
       const r = await api(url, await withCSRF({ method: "POST", credentials: "include", body: fd }));
       const j = await r?.json?.().catch?.(() => ({}));
-      if (!r || !r.ok) return { ok: false, msg: `업로드 실패 (HTTP ${r?.status || 0})` };
+      if (!r || !r.ok) return { ok: false, msg: `Upload failed (HTTP ${r?.status || 0})` };
       return { ok: true, url: j.avatarUrl || j.url || j.location || "" };
     } catch {
-      return { ok: false, msg: "네트워크 에러" };
+      return { ok: false, msg: "Network error" };
     }
   }
 
@@ -1359,6 +1482,14 @@
     renderProfile(me);
     renderQuick(quick);
 
+    try {
+      __LIKES_PREV = (window.readLikesMap && window.readLikesMap()) ? window.readLikesMap() : {};
+    } catch { __LIKES_PREV = {}; }
+
+    try {
+      __VOTES_PREV = (window.readLabelVotes && window.readLabelVotes()) ? window.readLabelVotes() : {};
+    } catch { __VOTES_PREV = {}; }
+
     // 4) snapshot store → session once
     syncSessionFromStoreIfReady();
 
@@ -1385,26 +1516,17 @@
           try { renderProfile(parseJSON(e.newValue, {})); } catch {}
         }
       }
-
-      if (e.key.startsWith("notify:self:") && e.newValue) {
-        try {
-          const p = parseJSON(e.newValue, null);
-          if (p?.type && String(p.type).startsWith("self:")) handleFeedSelfEvent(p.type, p.data || {});
-        } catch {}
-      }
       // 원격(다른 사람이 한) 액션 알림 폴백
       if (e.key.startsWith("notify:remote:") && e.newValue) {
-        if (!isNotifyOn()) return;  // ⬅️ 토글이 꺼져 있으면 무시
         try {
           const p = parseJSON(e.newValue, null);
           const t = String(p?.type || "");
           const d = p?.data || {};
-          // 내 게시물인 경우에만 알림 (mine.js가 1차 필터링했지만 2차 방어)
-          const ns = getNS();
-          const ownerNS = String(d?.owner?.ns || d?.ns || "").toLowerCase();
-          const mineFlag = (d?.mine === true) || (ownerNS && ownerNS === ns);
-          if (!mineFlag) return;
-          if (t === "item:like" && d?.liked) pushNotice("내 게시물이 좋아요를 받았어요", `총 ${Number(d.likes||0)}개`, { tag:`like:${d.id}`, data:{ id:String(d.id||"") } });
+          if (!isMineOrWatchedFromPayload(d)) return; // ★ Watched NS 기반 필터
+          if (t === "item:like" && d?.liked) {
+            const _l = Number(d.likes || 0);
+            pushNotice("My post got liked", `Total ${_l} ${_l === 1 ? "like" : "likes"}`, { tag:`like:${d.id}`, data:{ id:String(d.id||"") } });
+          }
           if (t === "vote:update") {
             try {
               const entries = Object.entries(d.counts || {});
@@ -1412,9 +1534,9 @@
               const tops = entries.filter(([, n]) => Number(n||0) === max && max > 0).map(([k])=>k);
               const total = entries.reduce((s, [, n]) => s + Number(n||0), 0);
               const label = tops.length ? tops.join(", ") : "—";
-              pushNotice("내 게시물 투표가 업데이트됐어요", `최다표: ${label} · 총 ${total}표`, { tag:`vote:${d.id}`, data:{ id:String(d.id||"") } });
+              pushNotice("My post votes have been updated", `Top: ${label} · Total ${total} ${total === 1 ? "vote" : "votes"}`, { tag:`vote:${d.id}`, data:{ id:String(d.id||"") } });
             } catch {
-              pushNotice("내 게시물 투표가 업데이트됐어요", "", { tag:`vote:${d?.id||""}`, data:{ id:String(d?.id||"") } });
+              pushNotice("My post votes have been updated", "", { tag:`vote:${d?.id||""}`, data:{ id:String(d?.id||"") } });
             }
           }
         } catch {}
@@ -1424,6 +1546,53 @@
 
     window.addEventListener("auth:state", refreshQuickCounts);
     window.addEventListener("store:ns-changed", refreshQuickCounts);
+
+    // === store.js 변화 이벤트 → 알림 ===
+
+    // 좋아요 스냅샷 맵 변경
+    window.addEventListener("itemLikes:changed", (ev) => {
+      try {
+        const cur = (ev?.detail?.map && typeof ev.detail.map === "object") ? ev.detail.map : (window.readLikesMap?.() || {});
+        const changedIds = new Set([...Object.keys(cur), ...Object.keys(__LIKES_PREV)]);
+
+        for (const id of changedIds) {
+          const a = __LIKES_PREV[id] || {};
+          const b = cur[id] || {};
+          const likedChanged = (typeof a.l === "boolean" || typeof b.l === "boolean") && (!!a.l !== !!b.l);
+          const countChanged = (typeof a.c === "number" || typeof b.c === "number") && ((a.c|0) !== (b.c|0));
+
+          // ✅ 내가 방금 누른/취소한 경우: 완전 무시 (개수 변화라도 알림 X)
+          if (likedChanged) continue;
+
+          // 원격 변화(다른 사람이 누른 것)만 알림
+          if (countChanged) {
+            const _cnt = Number(b.c ?? 0);
+            pushNotice("Like count updated", `Total ${_cnt} ${_cnt === 1 ? "like" : "likes"}`, {
+              tag: `like-count:${id}`,
+              data: { id: String(id) }
+            });
+          }
+        }
+        __LIKES_PREV = cur;
+      } catch {}
+    });
+
+    // 라벨별 투표 총합 변경
+    window.addEventListener("label:votes-changed", (ev) => {
+      try {
+        const cur = (ev?.detail?.map && typeof ev.detail.map === "object") ? ev.detail.map : (window.readLabelVotes?.() || {});
+        // 총합 증감 감지 → 상위 득표 라벨 안내
+        const entries = Object.entries(cur);
+        const max = Math.max(...entries.map(([, n]) => Number(n||0)), 0);
+        const tops = entries.filter(([, n]) => Number(n||0) === max && max > 0).map(([k]) => k);
+        if (tops.length) {
+          pushNotice("Vote totals updated", `Top: ${tops.join(", ")} (${max})`, { tag: `votes-total`, data: {} });
+        } else {
+          pushNotice("Vote totals updated", "", { tag: `votes-total`, data: {} });
+        }
+        __VOTES_PREV = cur;
+      } catch {}
+    });
 
     // 7) UI handlers
     $("#btn-edit")?.addEventListener("click", () => { try { window.auth?.markNavigate?.(); } catch {} openEditModal(); });
@@ -1440,24 +1609,13 @@
         const { type, data } = m.payload || {};
         if (!type) return;
 
-        // 1) 내가 한 행동(self:*) → 기존 로직 유지
-        if (String(type).startsWith("self:")) {
-          handleFeedSelfEvent(type, data);
-          return;
-        }
-
         // 2) 원격(다른 사람이 한) 행동 → 알림 (소켓 미연결/다른 탭만 mine 열려 있을 때 대비)
         //    mine.js 쪽에서 1차 필터링하지만, 여기서도 내 게시물인지 2차 방어
-        const ownerNS = String(data?.owner?.ns || data?.ns || "").toLowerCase();
-        const mineFlag = (data?.mine === true) || (ownerNS && ownerNS === ns);
-        if (!mineFlag) return;
+        if (!isMineOrWatchedFromPayload(data)) return;
 
         if (type === "item:like" && data?.liked) {
-          pushNotice(
-            "내 게시물이 좋아요를 받았어요",
-            `총 ${Number(data.likes || 0)}개`,
-            { tag: `like:${data.id}`, data: { id: String(data.id || "") } }
-          );
+          const likes = Number(data.likes || 0);
+          pushNotice("My post got liked", `Total ${qty(likes, "like")}`, { tag: `like:${data.id}`, data: { id: String(data.id || "") } });
         }
         if (type === "vote:update") {
           try {
@@ -1467,12 +1625,12 @@
             const total = entries.reduce((s, [, n]) => s + Number(n || 0), 0);
             const label = tops.length ? tops.join(", ") : "—";
             pushNotice(
-              "내 게시물 투표가 업데이트됐어요",
-              `최다표: ${label} · 총 ${total}표`,
+              "My post votes have been updated",
+              `Most votes: ${label} · Total ${qty(total, "vote")}`,
               { tag: `vote:${data.id}`, data: { id: String(data.id || "") } }
             );
           } catch {
-            pushNotice("내 게시물 투표가 업데이트됐어요", "", { tag: `vote:${data?.id || ""}`, data: { id: String(data?.id || "") } });
+            pushNotice("My post votes have been updated", "", { tag: `vote:${data?.id || ""}`, data: { id: String(data?.id || "") } });
           }
         }
       });
@@ -1484,13 +1642,6 @@
     // 9) insights or redirect
     if (quick.authed) {
       computeAndRenderInsights().catch(() => { /* silent */ });
-    } else {
-      const next = encodeURIComponent(location.href);
-      // try { window.auth?.markNavigate?.(); } catch {}
-      const loginURL = new URL("./login.html", document.baseURI);
-      loginURL.searchParams.set("next", next);
-      location.replace(loginURL.href);
-      return;
     }
   }
 
@@ -1502,31 +1653,19 @@
 
   // === 강제 로컬 정리: store.js 및 저장소 전체 정리 ===
   function __purgeLocalStateHard(reason = "account-delete") {
-    // 1) store.js 계정/수집 데이터 정리 (가능한 모든 안전 API 호출)
     try { window.store?.purgeAccount?.(); } catch {}
     try { window.store?.reset?.(); } catch {}
     try { window.store?.clearAll?.(); } catch {}
     try { window.jib?.reset?.(); } catch {}
     try { window.__flushStoreSnapshot?.({ server:false }); } catch {}
 
-    // 2) sessionStorage / localStorage 키 정리
-    const wipeKey = (k) => {
-      try { sessionStorage.removeItem(k); } catch {}
-      try { localStorage.removeItem(k); } catch {}
-    };
+    const wipeKey = (k) => { try { sessionStorage.removeItem(k); } catch {} try { localStorage.removeItem(k); } catch {} };
 
-    // 자주 쓰는 키들
-    [
-      "auth:flag","auth:userns",
-      "collectedLabels","jib:collected",
-      "me:notify-enabled","me:notify-native",
-    ].forEach(wipeKey);
+    ["auth:flag","auth:userns","collectedLabels","jib:collected","me:notify-enabled","me:notify-native"].forEach(wipeKey);
 
-    // 프로필/인사이트 캐시(네임스페이스 기반)
     try {
       for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-        if (!key) continue;
+        const key = localStorage.key(i); if (!key) continue;
         if (key.startsWith("me:profile") || key.startsWith("insights:")
           || key.startsWith("mine:") || key.startsWith("aud:label:")
           || key.startsWith("notify:self:") || key.startsWith("notify:remote:")) {
@@ -1535,27 +1674,18 @@
       }
     } catch {}
 
-
-    // 3) 다른 탭에도 알려주기 (storage 이벤트 트리거)
     try { localStorage.setItem(`purge:reason:${Date.now()}`, reason); } catch {}
-
-    // 4) 앱 전역 이벤트 브로드캐스트 (의존 모듈들이 스스로 정리하도록)
     try { window.dispatchEvent(new Event("store:purged")); } catch {}
     try { window.dispatchEvent(new Event("auth:logout")); } catch {}
   }
 
   // === 탈퇴 전용: 경고 + 하드 정리 + 백엔드 삭제 ===
   async function __confirmAndDeleteAccount() {
-    // 1) 강한 경고(두 줄 메시지)
-    const ok = window.confirm(
-      "정말로 계정을 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며 저장된 데이터가 모두 삭제됩니다."
-    );
+    const ok = window.confirm("Are you sure you want to permanently delete your account?\nThis action cannot be undone and all saved data will be removed.");
     if (!ok) return { ok: false, msg: "cancelled" };
 
-    // 2) 즉시 로컬 정리 (네트워크 실패 대비)
     __purgeLocalStateHard("account-delete");
 
-    // 3) 서버에 실제 탈퇴 요청 시도 (성공/실패와 무관하게 로컬은 이미 정리됨)
     try { await ensureCSRF(); } catch {}
     const attempts = [
       { url: "/auth/me",          method: "DELETE" },
@@ -1567,8 +1697,7 @@
     for (const a of attempts) {
       try {
         const opt = await withCSRF({
-          method: a.method,
-          credentials: "include",
+          method: a.method, credentials: "include",
           headers: { "Accept": "application/json", ...(a.body ? { "Content-Type": "application/json" } : {}) },
           body: a.body ? JSON.stringify(a.body) : undefined,
         });
@@ -1645,7 +1774,7 @@
 
       // ⬇️ 서버 실패 시: 알림만 띄우고 현재 페이지 유지 (로컬은 이미 정리됨)
       if (!res?.ok) {
-        alert("서버에서 계정 삭제 처리에 실패했습니다. 로컬 데이터는 정리되었으며, 잠시 후 다시 시도해 주세요.");
+        alert("Failed to delete your account on the server. Local data has been cleared; please try again later.");
         return;
       }
 
