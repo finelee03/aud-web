@@ -322,8 +322,6 @@ function renderTimestamp(){
     root.textContent = "";
     root.dataset.state = "empty";
     return;
-  } else {
-    delete root.dataset.state;
   }
 
   if (isValidYMD(dataDate) && getTs(effectiveLabel) !== dataDate) {
@@ -1028,7 +1026,7 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
         if (!placing.active || !placing.img) return;
         ensureCapacityForWorldRect(placing.wx, placing.wy, placing.w, placing.h);
         const octx = offscreen.getContext("2d"); octx.setTransform(OFF_DPR, 0, 0, OFF_DPR, 0, 0);
-        const off = worldToOff(placing.wx, placing.wy); octx.drawImage(placing.img, off.x, off.y, placing.w, placing.h);
+        const off = worldToOff(placing.wx, placing.wy); octx.drawImage(placing.img, off.x, off.y);
         placing.active = false; placing.img = null; repaint(); scheduleSave();
       }
 
@@ -1788,8 +1786,6 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
     fd.append("author", JSON.stringify(a));   // 혹시 author만 읽는 서버 대비
   }
 
-  
-
 /* ========================================================================== *
  * FEED — Unified Post Flow (No-inline-CSS, DRY)
  * - 공통 유틸/뷰를 한 번만 정의하고 1-STEP / 3-STEP이 함께 사용
@@ -1801,155 +1797,6 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
   // ─────────────────────────────────────────────────────────────
   // 0) Namespace & Small Utilities (공통)
   // ─────────────────────────────────────────────────────────────
-  // ─────────────────────────────────────────────────────────────
-  // ZoomPane (display-only transform)
-  // ─────────────────────────────────────────────────────────────
-  function makeZoomPane({ host, target, min=0.5, max=5, step=1.2 }) {
-    // host: 스크롤/이벤트 받는 컨테이너(예: stage), target: 변환 적용할 IMG
-    if (!host || !target) return { destroy:()=>{} };
-
-    let scale = 1, tx = 0, ty = 0;
-    let dragging = false, lastX = 0, lastY = 0;
-
-    host.style.touchAction = "none";     // 핀치/팬 제스처 충돌 방지
-    host.style.overflow = "hidden";
-    host.style.position = host.style.position || "relative";
-    target.style.transformOrigin = "0 0";
-    target.style.willChange = "transform";
-    target.draggable = false;
-
-    function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-    function apply(){ target.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; }
-
-    function hostRect(){ return host.getBoundingClientRect(); }
-    function imgSize(){ return { w: target.naturalWidth || target.width, h: target.naturalHeight || target.height }; }
-
-    function fit(){ // 이미지가 호스트에 최대한 들어오도록
-      const r = hostRect(), s = imgSize();
-      if (!s.w || !s.h) return;
-      const sx = r.width  / s.w;
-      const sy = r.height / s.h;
-      scale = Math.max(min, Math.min(max, Math.min(sx, sy)));
-      // 중앙 정렬
-      tx = Math.round((r.width  - s.w * scale)/2);
-      ty = Math.round((r.height - s.h * scale)/2);
-      apply();
-    }
-
-    function oneToOne(){
-      const r = hostRect(), s = imgSize();
-      scale = 1;
-      tx = Math.round((r.width  - s.w)/2);
-      ty = Math.round((r.height - s.h)/2);
-      apply();
-    }
-
-    function zoomAt(px, py, factor){
-      const next = clamp(scale * factor, min, max);
-      if (next === scale) return;
-      // 고정점(px,py)을 기준으로 줌 → 평행이동 보정
-      const ox = (px - tx) / scale;
-      const oy = (py - ty) / scale;
-      scale = next;
-      tx = Math.round(px - ox * scale);
-      ty = Math.round(py - oy * scale);
-      apply();
-    }
-
-    // 휠: Ctrl/Meta 있으면 줌, 아니면 팬
-    const onWheel = (e)=>{
-      e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        const f = Math.exp(-(e.deltaY || 0) * 0.0025);
-        const rect = host.getBoundingClientRect();
-        zoomAt(e.clientX - rect.left, e.clientY - rect.top, f);
-      } else {
-        tx -= e.deltaX || 0;
-        ty -= e.deltaY || 0;
-        apply();
-      }
-    };
-
-    // 포인터 드래그로 팬
-    const onPointerDown = (e)=>{
-      dragging = true; lastX = e.clientX; lastY = e.clientY;
-      host.setPointerCapture(e.pointerId);
-    };
-    const onPointerMove = (e)=>{
-      if (!dragging) return;
-      const dx = e.clientX - lastX, dy = e.clientY - lastY;
-      lastX = e.clientX; lastY = e.clientY;
-      tx += dx; ty += dy;
-      apply();
-    };
-    const onPointerUp = (e)=>{
-      dragging = false;
-      try { host.releasePointerCapture(e.pointerId); } catch {}
-    };
-
-    // 더블클릭: 확대(Shift면 축소)
-    const onDbl = (e)=>{
-      const rect = host.getBoundingClientRect();
-      zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.shiftKey ? 1/step : step);
-    };
-
-    // 키보드: + / - / 0
-    const onKey = (e)=>{
-      if (!host.contains(document.activeElement) && document.activeElement?.tagName !== "BODY") return;
-      const k = e.key.toLowerCase();
-      if ((k==='+' || k==='=')) { const r=hostRect(); zoomAt(r.width/2, r.height/2, step); }
-      if (k==='-') { const r=hostRect(); zoomAt(r.width/2, r.height/2, 1/step); }
-      if (k==='0') { fit(); }
-    };
-
-    // 컨트롤 버튼(우상단)
-    const ui = document.createElement('div');
-    ui.className = 'zp-controls';
-    ui.innerHTML = `
-      <button type="button" class="zp-btn" data-act="minus"   aria-label="Zoom out">−</button>
-      <button type="button" class="zp-btn" data-act="plus"    aria-label="Zoom in">＋</button>
-      <button type="button" class="zp-btn" data-act="fit"     aria-label="Fit">Fit</button>
-      <button type="button" class="zp-btn" data-act="one"     aria-label="1:1">1:1</button>
-    `;
-    host.appendChild(ui);
-    ui.addEventListener('click', (e)=>{
-      const b = e.target.closest('.zp-btn'); if (!b) return;
-      const act = b.dataset.act; const r = hostRect();
-      if (act==='plus')  zoomAt(r.width/2, r.height/2, step);
-      if (act==='minus') zoomAt(r.width/2, r.height/2, 1/step);
-      if (act==='fit')   fit();
-      if (act==='one')   oneToOne();
-    });
-
-    host.addEventListener('wheel', onWheel, { passive:false });
-    host.addEventListener('pointerdown', onPointerDown);
-    host.addEventListener('pointermove', onPointerMove);
-    ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(t=> host.addEventListener(t, onPointerUp));
-    host.addEventListener('dblclick', onDbl);
-    window.addEventListener('keydown', onKey);
-
-    // 이미지 로드 후 초기 배치
-    if (target.complete) fit();
-    else target.addEventListener('load', fit, { once:true });
-
-    return {
-      fit, oneToOne,
-      destroy(){
-        try {
-          host.removeEventListener('wheel', onWheel);
-          host.removeEventListener('pointerdown', onPointerDown);
-          host.removeEventListener('pointermove', onPointerMove);
-          ['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(t=> host.removeEventListener(t, onPointerUp));
-          host.removeEventListener('dblclick', onDbl);
-          window.removeEventListener('keydown', onKey);
-          ui.remove();
-          target.style.transform = '';
-          target.style.willChange = '';
-        } catch {}
-      }
-    };
-  }
-
   const SDF   = window.SDF || (window.SDF = {});
   const U     = SDF.Utils || {};
   const Icons = SDF.Icons || {};
@@ -2431,13 +2278,7 @@ function goMineAfterShare(label = getLabel()) {
       const left  = document.createElement("div"); left.className = "im-left";
       const stage = document.createElement("div"); stage.className = "im-stage has-image";
       const img   = document.createElement("img"); img.src = url; img.alt = "";
-      let zp = null;
       stage.append(img); left.append(stage);
-
-      img.addEventListener("load", () => {
-        zp = makeZoomPane({ host: stage, target: img, min: 0.5, max: 6, step: 1.25 });
-        zp.fit();
-      }, { once: true });
 
       const right = document.createElement("div"); right.className = "im-right";
       const acct  = document.createElement("div"); acct.className  = "im-acct";
@@ -2491,7 +2332,6 @@ function goMineAfterShare(label = getLabel()) {
 
       function cleanup(){
         URL.revokeObjectURL(url);
-        if (zp) { zp.destroy(); zp = null; } // ← 추가
         window.removeEventListener("keydown", onEsc);
         back.remove();
       }
@@ -2553,7 +2393,6 @@ function goMineAfterShare(label = getLabel()) {
     const stageImg = document.createElement("img");
     stage.append(dummy, chooser, stageImg);
     left.append(stage);
-    let zp = null;
 
     const right = document.createElement("div"); right.className = "im-right";
     const acct  = document.createElement("div"); acct.className  = "im-acct";
@@ -2598,17 +2437,11 @@ function goMineAfterShare(label = getLabel()) {
 
     function applySelection(b, w, h){
       state.blob = b; state.w = w|0; state.h = h|0;
-      if (zp) { zp.destroy(); zp = null; }
       if (b){
         const url = URL.createObjectURL(b);
         stageImg.src = url;
         stage.classList.add("has-image");
-        stageImg.addEventListener("load", ()=>{
-          // [ADD] 새로 장착
-          zp = makeZoomPane({ host: stage, target: stageImg, min: 0.5, max: 6, step: 1.25 });
-          zp.fit();
-          URL.revokeObjectURL(url);
-        }, { once:true });
+        stageImg.addEventListener("load", ()=> URL.revokeObjectURL(url), { once:true });
         share.disabled = false;
       } else {
         stageImg.removeAttribute("src");
@@ -2619,7 +2452,6 @@ function goMineAfterShare(label = getLabel()) {
 
     function closeAndReset(){
       caption.value = ""; mR.textContent = "0 / 300";
-      if (zp) { zp.destroy(); zp = null; }  // [ADD]
       applySelection(null,0,0);
       back.remove();
       document.body.classList.remove("is-compose");
@@ -2893,22 +2725,27 @@ function goMineAfterShare(label = getLabel()) {
   // ─────────────────────────────────────────────────────────────
   // 7) Bootstrap
   // ─────────────────────────────────────────────────────────────
-  ensureReady(() => {
-    try {
-      // 1) 상단 액션바에 POST 버튼 장착 (없으면 생성)
-      mountPostButton();
+  ensureReady(()=>{
+    mountPostButton();
+    hookPostButtonForThreeStep();
 
-      // 2) 갤러리가 비어있지 않을 때는 3-스텝(Gallery→Crop→Compose)로 열리도록 버튼 훅
-      hookPostButtonForThreeStep();
-
-      // 3) 디버깅/수동 호출용(옵션): 필요 없으면 아래 두 줄 삭제해도 됨
-      if (typeof window.openFeedModal !== "function") {
-        window.openFeedModal = openFeedModal;
-      }
-      window.runThreeStepFlow = runThreeStepFlow;
-    } catch (e) {
-      console.error("[FeedUnified/bootstrap] init failed:", e);
+    // 접근성 id/name 보정 (동적 DOM에서도 보정)
+    function patchA11yIds(){
+      document.querySelectorAll('textarea.im-caption').forEach((el,i)=>{ if (!el.id) el.id = i ? `im-caption-${i}` : "im-caption"; if (!el.name) el.name = "caption"; });
+      document.querySelectorAll('input.feedc__file').forEach((el,i)=>{ if (!el.id) el.id = i ? `feedc__file-${i}` : "feedc__file"; if (!el.name) el.name = "file"; });
     }
+    patchA11yIds();
+    new MutationObserver(()=>patchA11yIds()).observe(document.documentElement, { childList:true, subtree:true });
+  });
+
+  // 필요 시 외부에서 직접 호출할 수 있게 노출
+  SDF.Feed = Object.assign(SDF.Feed || {}, {
+    openFeedModal,
+    openComposeModal,
+    openGalleryPicker,
+    openCropModal,
+    runThreeStepFlow,
+    mountPostButton,
   });
 })();
 
@@ -2918,4 +2755,3 @@ window.addEventListener("auth:logout", ()=>{
   const ret = encodeURIComponent(location.href);
   location.replace(`${pageHref('login.html')}?next=${ret}`);
 });
-

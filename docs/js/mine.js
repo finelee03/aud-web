@@ -731,47 +731,11 @@
       filter:none !important; mix-blend-mode:normal !important; opacity:1 !important;
     }`);
   }
-  
-  // === MEDIA padding/bg 규칙 주입기 =========================================
-  function ensureMediaPadCSS(){
-    if (ensureMediaPadCSS.__done) return; ensureMediaPadCSS.__done = true;
-
-    function writable(s){ try{ if (s.href){ const u=new URL(s.href,location.href); if(u.origin!==location.origin) return false; } void s.cssRules; return true; } catch { return false; } }
-    let sheet = null;
-    try {
-      const list = Array.from(document.styleSheets || []);
-      sheet = list.find(s => writable(s) && /\/mine\.css(\?|$)/.test(s.href || "")) ||
-              list.find(s => writable(s)) || null;
-    } catch {}
-    if (!sheet) {
-      const tag = document.createElement("style");
-      tag.id = "mine-media-pad-rules";
-      document.head.appendChild(tag);
-      sheet = tag.sheet;
-    }
-    const add = (r) => { try { sheet.insertRule(r, sheet.cssRules.length); } catch {} };
-
-    // 여백/배경/라운드 + 이미지 contain
-    add(`.feed-card .media, .pm-left .media{
-      background: var(--bg, transparent);
-      padding: var(--pad, 0%);
-    }`);
-    add(`.feed-card .media img, .pm-left .media img{
-      display:block;
-      width:100%;
-      height:auto;
-      object-fit: contain;
-      background: transparent;
-      transform: translate(var(--zx, 0%), var(--zy, 0%)) scale(var(--zs, 1)); /* 👈 줌/팬 */
-      transform-origin: center center;
-    }`);
-  }
 
   // 전역 노출(다른 코드에서 호출)
   window.setHeartVisual = setHeartVisual;
   window.upgradeHeartIconIn = upgradeHeartIconIn;
   window.ensureHeartCSS = ensureHeartCSS;
-  window.ensureMediaPadCSS   = ensureMediaPadCSS;
 })();
 
   // 숫자 압축 표기 (15K, 2.1M 등). 미지원 환경이면 원본 출력
@@ -932,7 +896,7 @@
 
     return `
     <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
-      <div class="media" style="--pad:${pickPadPct(item)}%;${pickZoomVars(item)}${(pickBgHex(item)||'') ? `--bg:${pickBgHex(item)};` : ''}">
+      <div class="media">
         <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
         <div class="hover-ui" role="group" aria-label="Post actions">
           <div class="actions">
@@ -2309,7 +2273,6 @@
 
   onReady(async () => {
     ensureHeartCSS();
-    ensureMediaPadCSS();
     initTabs();
     renderTabsOnly();
     bindEvents();
@@ -2385,16 +2348,6 @@
    * 11) POST MODAL (카드 크게 보기)
    * ========================================================= */
 
-  // [ADD] pad % 정규화 (0~50 사이 정수, 기본 0)
-  function pickPadPct(it){
-    const raw =
-      it?.pad ?? it?.pad_pct ?? it?.padPct ?? it?.padding ??
-      it?.meta?.pad ?? it?.meta?.pad_pct ?? it?.meta?.padPct ?? 0;
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(50, Math.round(n)));
-  }
-
   // [ADD] bg hex 정규화
   function pickBgHex(it){
     let s = String(it?.bg || it?.bg_color || it?.bgHex || "").trim();
@@ -2403,42 +2356,6 @@
       s = s.replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i, (_,a,b,c)=>`#${a}${a}${b}${b}${c}${c}`);
     }
     return /^#([0-9a-f]{6})$/i.test(s) ? s.toLowerCase() : null;
-  }
-
-  // [ADD] zoom/crop 정규화 → CSS 변수로
-  function pickZoomVars(it){
-    // 허용 키: it.zoom || it.crop || it.meta.zoom || it.meta.crop
-    const z = it?.zoom ?? it?.crop ?? it?.meta?.zoom ?? it?.meta?.crop ?? null;
-    // 형태 허용: { scale, x, y } / { s, tx, ty } / { zoom, cx, cy } / 숫자만(=scale)
-    let scale = 1, x = 0, y = 0;
-
-    if (typeof z === 'number') {
-      scale = z;
-    } else if (z && typeof z === 'object') {
-      scale = Number(
-        z.scale ?? z.s ?? z.zoom ?? 1
-      );
-      x = Number(
-        z.x ?? z.tx ?? z.cx ?? z.offset_x ?? 0
-      );
-      y = Number(
-        z.y ?? z.ty ?? z.cy ?? z.offset_y ?? 0
-      );
-    }
-
-    // 가드: 말이 안 되는 값 정리
-    if (!Number.isFinite(scale)) scale = 1;
-    if (!Number.isFinite(x)) x = 0;
-    if (!Number.isFinite(y)) y = 0;
-
-    // 적당한 범위 클램프 (필요시 조절)
-    scale = Math.max(1, Math.min(6, scale));   // 1~6배
-    x = Math.max(-100, Math.min(100, x));      // % 단위 (-100% ~ 100%)
-    y = Math.max(-100, Math.min(100, y));
-
-    // CSS 변수 문자열 반환
-    // zx/zy는 % 단위, zs는 배율
-    return `--zs:${scale};--zx:${x}%;--zy:${y}%;`;
   }
 
   (function PostModalMount(){
@@ -2629,7 +2546,7 @@
       <article class="feed-card pm-split" data-id="${item.id}" data-ns="${nsOf(item)}">
         <div class="pm-layout">
           <div class="pm-left">
-            <div class="media" style="--pad:${pickPadPct(item)}%;${pickZoomVars(item)}${(pickBgHex(item)||'') ? `--bg:${pickBgHex(item)};` : ''}">
+            <div class="media">
               <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
             </div>
           </div>
