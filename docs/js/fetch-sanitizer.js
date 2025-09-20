@@ -7,7 +7,6 @@
       const url = new URL(u, location.href);
       url.pathname = url.pathname
         .replace(/(\/api\/gallery\/)g_([A-Za-z0-9]+)/, "$1$2")
-        .replace(/(\/api\/items\/)g_([A-Za-z0-9]+)/, "$1$2");
       return url.toString();
     } catch {
       return u;
