@@ -2316,7 +2316,7 @@ function goMineAfterShare(label = getLabel()) {
 
       right.append(acct, caption, meta, picker.el);
       body.append(left, right);
-      shell.append(head, body);
+      shell.append(head, (mountBody||body));
       back.append(shell);
 
       // 전역 X
@@ -2428,7 +2428,7 @@ function goMineAfterShare(label = getLabel()) {
 
     // 조립
     body.append(left, right);
-    shell.append(head, body);
+    shell.append(head, (mountBody||body));
     back.append(shell, globalClose);
     document.body.append(back);
 
@@ -2553,9 +2553,12 @@ function goMineAfterShare(label = getLabel()) {
       head.append(backBtn, title, nextBtn);
 
       const body  = document.createElement("div");
-      body.className = "cm-body";
+      body.className = "im-body";
+      // guard: if an im-body already exists (styles expecting it), prefer that
+      const existBody = shell.querySelector(".im-body");
+      const mountBody = existBody || body;
       const stage = document.createElement("div");
-      stage.className = "cm-stage";
+      stage.className = "im-stage";
       const img = document.createElement("img");
       img.src = url; img.alt = "";
       stage.append(img);
@@ -2639,7 +2642,7 @@ function goMineAfterShare(label = getLabel()) {
         draw();
       }, { passive:false });
 
-      shell.append(head, body);
+      shell.append(head, (mountBody||body));
       back.append(shell);
 
       // ✅ step3와 동일한 전역 X 버튼
