@@ -2559,7 +2559,6 @@
                   <div class="name">${name}</div>
                 </div>
               </div>
-              <button class="btn-more" type="button" aria-label="더 보기">•••</button>
             </header>
 
             <div class="pm-thread">

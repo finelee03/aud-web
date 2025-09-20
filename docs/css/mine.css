@@ -703,8 +703,14 @@ img.avatar.avatar--lg{ width: var(--avatar-lg); height: var(--avatar-lg); }
 .post-modal--split .sticky-foot .foot-meta{ display:grid; gap:4px; }
 .post-modal--split .sticky-foot .likes-line{ font-weight:700; }
 .post-modal--split .sticky-foot .date-line{ font-size:12px; color:#666; }
-.post-modal--split .sticky-foot .actions,
-.post-modal--split .sticky-foot .foot-meta{ padding:0 var(--pm-gap); }
+.post-modal--split .sticky-foot .actions{ padding: 0 var(--pm-gap); }
+
+/* 글씨 줄만 살짝 우측으로(2px는 시작값, 1~3px에서 조절 가능) */
+:root{ --pm-like-nudge: 2px; }
+
+.post-modal--split .sticky-foot .foot-meta{
+  padding: 0 calc(var(--pm-gap) + var(--pm-like-nudge));
+}
 
 /* === HEART (CSS-only) — replaces ensureHeartCSS() ===================== */
 
