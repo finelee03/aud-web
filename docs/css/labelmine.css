@@ -629,3 +629,12 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
   display:block; margin:0 auto; max-width:100%; max-height:100%; height:auto;
   touch-action:none; image-rendering:auto;
 }
+
+/* =====================================================================
+   Zoom behavior modification
+===================================================================== */
+/* 줌 효과가 적용되는 실제 이미지 또는 컨테이너의 선택자로 변경해주세요. */
+.your-zoom-target-element {
+  transform-origin: 50% 50%; /* 줌의 중심을 정중앙으로 설정 */
+  transition: transform 0.1s ease-out; /* 줌 효과를 부드럽게 */
+}

@@ -2368,6 +2368,7 @@ function goMineAfterShare(label = getLabel()) {
   // ─────────────────────────────────────────────────────────────
   function openFeedModal(){
     document.body.classList.add("is-compose");
+
     (async ()=>{ await requireLoginOrRedirect(); })();
 
     const back  = document.createElement("div"); back.className  = "imodal-backdrop";
@@ -2434,6 +2435,61 @@ function goMineAfterShare(label = getLabel()) {
 
     // 상태
     const state = { blob:null, w:0, h:0 };
+
+      // 현재 줌 레벨을 저장하는 변수 (초기값: 1)
+    let currentZoom = 1;
+    const MIN_ZOOM = 0.5; // 최소 줌
+    const MAX_ZOOM = 3;   // 최대 줌
+
+    // 줌 슬라이더 요소와 모달 콘텐츠 요소를 가져옵니다.
+    // 실제 HTML 구조에 맞게 ID나 클래스 선택자를 수정해야 합니다.
+    const zoomSlider = document.getElementById('zoom-slider');
+    const modalContent = document.querySelector('.modal-content'); // 클래스로 선택하는 것을 추천
+
+    // 줌 슬라이더의 값이 변경될 때마다 실행될 함수
+    function handleZoom() {
+      const zoomLevel = parseFloat(zoomSlider.value);
+      currentZoom = Math.max(MIN_ZOOM, Math.min(zoomLevel, MAX_ZOOM));
+      modalContent.style.transform = `scale(${currentZoom})`;
+    }
+
+    // 줌 슬라이더에 'input' 이벤트 리스너를 추가합니다.
+    if (zoomSlider && modalContent) {
+      // 모달이 열릴 때마다 이벤트 리스너를 중복으로 추가하지 않도록 방지
+      if (!zoomSlider.dataset.zoomHandlerAttached) {
+        zoomSlider.addEventListener('input', handleZoom);
+        zoomSlider.dataset.zoomHandlerAttached = 'true';
+      }
+    }
+
+    // (선택 사항) 줌 버튼 클릭 시 줌 레벨을 변경하는 함수
+    function zoomIn() {
+      currentZoom = Math.min(currentZoom + 0.1, MAX_ZOOM);
+      zoomSlider.value = currentZoom;
+      modalContent.style.transform = `scale(${currentZoom})`;
+    }
+
+    function zoomOut() {
+      currentZoom = Math.max(currentZoom - 0.1, MIN_ZOOM);
+      zoomSlider.value = currentZoom;
+      modalContent.style.transform = `scale(${currentZoom})`;
+    }
+
+    // 줌인/줌아웃 버튼에 이벤트 리스너를 추가합니다.
+    const zoomInButton = document.getElementById('zoom-in-btn');
+    const zoomOutButton = document.getElementById('zoom-out-btn');
+
+    if (zoomInButton && zoomOutButton) {
+      // 이벤트 리스너 중복 방지
+      if (!zoomInButton.dataset.zoomHandlerAttached) {
+          zoomInButton.addEventListener('click', zoomIn);
+          zoomInButton.dataset.zoomHandlerAttached = 'true';
+      }
+      if (!zoomOutButton.dataset.zoomHandlerAttached) {
+          zoomOutButton.addEventListener('click', zoomOut);
+          zoomOutButton.dataset.zoomHandlerAttached = 'true';
+      }
+    }
 
     function applySelection(b, w, h){
       state.blob = b; state.w = w|0; state.h = h|0;
