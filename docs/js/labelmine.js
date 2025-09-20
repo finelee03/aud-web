@@ -2514,32 +2514,30 @@ function goMineAfterShare(label = getLabel()) {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 5) Three-Step Flow (Gallery → Crop → Compose)
-  //    - 갤러리 비었으면 가로채지 않음(= 1-스텝 동작)
-  //    • step2도 step3와 동일한 전역 X / 오버레이 스타일 적용
+  // 5) Three-Step Flow (Gallery → Crop → Compose) 중 2단계: Crop
+  //    ※ 이 블록만 기존 파일의 openCropModal 정의를 "통째로" 교체하세요.
   // ─────────────────────────────────────────────────────────────
-  function openCropModal({ blob, w, h }){
-    return new Promise((resolve, reject)=>{
+  function openCropModal({ blob, w, h }) {
+    return new Promise((resolve, reject) => {
       document.body.classList.add("is-cropping");
 
       const url = URL.createObjectURL(blob);
 
-      // 기존 클래스 + imodal 계열 병행 적용(디자인 통일)
+      // 백드롭 + 쉘
       const back  = document.createElement("div");
       back.className = "cmodal-backdrop imodal-backdrop";
 
       const shell = document.createElement("div");
       shell.className = "cmodal imodal";
 
+      // 헤더
       const head  = document.createElement("div");
       head.className = "cm-head";
 
       const backBtn = document.createElement("button");
       backBtn.type = "button";
       backBtn.className = "cm-back";
-      const backIcon = document.createElement("span");
-      backIcon.className = "feed-ico-back";
-      backBtn.append(backIcon);
+      backBtn.innerHTML = '<span class="feed-ico-back"></span>';
 
       const title = document.createElement("div");
       title.className = "cm-title";
@@ -2552,180 +2550,407 @@ function goMineAfterShare(label = getLabel()) {
 
       head.append(backBtn, title, nextBtn);
 
+      // 바디/스테이지
       const body  = document.createElement("div");
       body.className = "cm-body";
       const stage = document.createElement("div");
       stage.className = "cm-stage";
-      const img = document.createElement("img");
-      img.src = url; img.alt = "";
-      
-      stage.append(img);
-      /* --- CROP CANVAS (square) --- */
-      const cropWrap = document.createElement('div');
-      cropWrap.className = 'cm-crop-wrap';
-      const canvas = document.createElement('canvas');
-      const vw = Math.max(320, Math.min(720, Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.8)));
-      canvas.width = vw; canvas.height = vw;
-      canvas.className = 'cm-canvas';
-      canvas.style.touchAction = 'none';
-      canvas.style.display = 'block';
-      canvas.style.margin = '0 auto';
-      canvas.style.maxWidth = '100%';
-      // mount stage early
+
+      // 편집 캔버스 + 오버레이
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      const overlay = document.createElement("div");   // 격자 & 아웃사이드 마스크
+      overlay.className = "crop-overlay";
+      stage.append(canvas, overlay);
       body.append(stage);
-      // replace preview IMG with canvas
-      stage.replaceChildren(cropWrap);
-      cropWrap.append(canvas);
 
-      const ctx = canvas.getContext('2d');
-      let scale = 1, minScale = 1, maxScale = 8;
-      let tx = 0, ty = 0;
-      let dragging = false, lastX = 0, lastY = 0;
-      const srcImg = new Image();
-      srcImg.onload = () => {
-        const cover = Math.max(canvas.width / srcImg.naturalWidth, canvas.height / srcImg.naturalHeight);
-        minScale = cover; scale = cover; maxScale = cover * 6; tx = 0; ty = 0;
-        draw();
-      };
-      srcImg.src = url;
+      // 좌하단 도구 영역 (아이콘 2개)
+      const tools = document.createElement("div");
+      tools.className = "crop-tools";
 
-      function draw(){
-        ctx.setTransform(1,0,0,1,0,0);
-        ctx.clearRect(0,0,canvas.width, canvas.height);
-        ctx.translate(canvas.width/2 + tx, canvas.height/2 + ty);
-        ctx.scale(scale, scale);
-        ctx.drawImage(srcImg, -srcImg.naturalWidth/2, -srcImg.naturalHeight/2);
-      }
+      // [1] 비율 선택
+      const ratioBtn = document.createElement("button");
+      ratioBtn.type = "button";
+      ratioBtn.className = "crop-btn";
+      ratioBtn.setAttribute("aria-label", "Aspect ratio");
 
-      canvas.addEventListener('pointerdown', (e)=>{ dragging = true; lastX = e.clientX; lastY = e.clientY; try{canvas.setPointerCapture(e.pointerId);}catch{} });
-      canvas.addEventListener('pointerup',   (e)=>{ dragging = false; try{canvas.releasePointerCapture(e.pointerId);}catch{} });
-      canvas.addEventListener('pointercancel',(e)=>{ dragging = false; try{canvas.releasePointerCapture(e.pointerId);}catch{} });
-      canvas.addEventListener('pointermove', (e)=>{
-        if (!dragging) return;
-        const dx = e.clientX - lastX;
-        const dy = e.clientY - lastY;
-        lastX = e.clientX; lastY = e.clientY;
-        tx += dx; ty += dy;
-        draw();
-      });
+      ratioBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="4" y="7" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+          <path d="M8 7v-2M16 17v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>`;
 
-      canvas.addEventListener('wheel', (e)=>{
-        e.preventDefault();
-        const delta = Math.sign(e.deltaY) * -0.1;
-        const old = scale;
-        const next = Math.min(maxScale, Math.max(minScale, scale * (1 + delta)));
-        if (next === scale) return;
-        const rect = canvas.getBoundingClientRect();
-        const cx = e.clientX - rect.left - canvas.width/2 - tx;
-        const cy = e.clientY - rect.top  - canvas.height/2 - ty;
-        tx -= cx * (next/old - 1);
-        ty -= cy * (next/old - 1);
-        scale = next;
-        draw();
-      }, { passive:false });
-    ('pointerdown', (e)=>{ dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
-      canvas.addEventListener('pointerup',   (e)=>{ dragging = false; try{ canvas.releasePointerCapture(e.pointerId); }catch{} });
-      canvas.addEventListener('pointercancel',(e)=>{ dragging = false; try{ canvas.releasePointerCapture(e.pointerId); }catch{} });
-      canvas.addEventListener('pointermove', (e)=>{
-        if (!dragging) return;
-        const dx = e.clientX - lastX;
-        const dy = e.clientY - lastY;
-        lastX = e.clientX; lastY = e.clientY;
-        tx += dx; ty += dy;
-        draw();
-      });
+      const ratioMenu = document.createElement("div");
+      ratioMenu.className = "crop-menu";
+      ratioMenu.innerHTML = `
+        <button type="button" data-ar="1:1">1:1</button>
+        <button type="button" data-ar="1:2">1:2</button>
+      `;
 
-      // Wheel to zoom (around cursor)
-      canvas.addEventListener('wheel', (e)=>{
-        e.preventDefault();
-        const delta = Math.sign(e.deltaY) * -0.1; // trackpad natural
-        const oldScale = scale;
-        const next = Math.min(maxScale, Math.max(minScale, scale * (1 + delta)));
-        if (next === scale) return;
-        // zoom around cursor point
-        const rect = canvas.getBoundingClientRect();
-        const cx = e.clientX - rect.left - canvas.width/2 - tx;
-        const cy = e.clientY - rect.top  - canvas.height/2 - ty;
-        tx -= cx * (next/oldScale - 1);
-        ty -= cy * (next/oldScale - 1);
-        scale = next;
-        draw();
-      }, { passive:false });
+      // [2] 줌(아이콘 → 슬라이더 노출)
+      const zoomBtn = document.createElement("button");
+      zoomBtn.type = "button";
+      zoomBtn.className = "crop-btn";
+      zoomBtn.setAttribute("aria-label", "Zoom");
 
-      shell.append(head, body);
-      back.append(shell);
+      zoomBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+          <path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M11 8v6M8 11h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>`;
 
-      // ✅ step3와 동일한 전역 X 버튼
+      const zoomWrap = document.createElement("div");
+      zoomWrap.className = "crop-zoom";
+      const zoomInput = document.createElement("input");
+      zoomInput.type = "range";
+      zoomInput.min = "0.5";   // 더 자유로운 줌 범위
+      zoomInput.max = "4";
+      zoomInput.step = "0.01";
+      zoomInput.value = "1";
+      zoomWrap.append(zoomInput);
+
+      tools.append(ratioBtn, ratioMenu, zoomBtn, zoomWrap);
+
+      // 전역 X (Compose와 동일 스타일)
       const globalClose = document.createElement("button");
       globalClose.className = "im-head-close";
       globalClose.type = "button";
       globalClose.setAttribute("aria-label","닫기");
       globalClose.innerHTML = '<span class="im-x"></span>';
-      back.append(globalClose);
+
+      shell.append(head, body);
+      back.append(shell, globalClose, tools);
+      document.body.append(back);
+
+      // ── 스타일 주입(외부 CSS 수정 없이 동작)
+      const style = document.createElement("style");
+      style.textContent = `
+        .cmodal.imodal .cm-stage { position: relative; background:#111; overflow:hidden; }
+        .cmodal.imodal .cm-stage canvas { display:block; width:100%; height:100%; }
+        .crop-tools{
+          position:absolute; left:22px; bottom:18px; display:flex; align-items:center; gap:12px;
+          z-index:20;
+        }
+        .crop-btn{
+          width:40px; height:40px; border-radius:999px; background:#3b3b3b; color:#fff;
+          display:grid; place-items:center; box-shadow:0 3px 16px rgba(0,0,0,.25);
+        }
+        .crop-menu{
+          display:none; position:absolute; left:0; bottom:56px; background:#3b3b3b; color:#fff;
+          border-radius:14px; padding:8px 10px; box-shadow:0 6px 20px rgba(0,0,0,.32);
+        }
+        .crop-menu button{
+          display:flex; align-items:center; justify-content:space-between;
+          gap:10px; min-width:86px; color:#fff; background:transparent; padding:8px 10px; border-radius:10px;
+        }
+        .crop-menu button:hover{ background:#4a4a4a; }
+        .crop-zoom{ display:none; position:absolute; left:60px; bottom:6px; background:#3b3b3b; border-radius:12px; padding:8px 12px; }
+        .crop-zoom input[type="range"]{ width:200px; }
+        .crop-overlay{
+          position:absolute; inset:0; pointer-events:none;
+          /* 격자는 패닝/줌 중에만 보이게 → JS에서 class 토글 */
+          opacity:0; transition:opacity .12s linear;
+          /* 바깥 어둡게 (크롭 프레임 제외) */
+          --mask: radial-gradient(#0000 1px, #000c 1px);
+          background:
+            linear-gradient(#0000 1px, #fff3 1px) 0 0/100% 33.333%,
+            linear-gradient(90deg, #0000 1px, #fff3 1px) 0 0/33.333% 100%;
+        }
+        .crop-overlay.is-active{ opacity:1; }
+        /* 선택 프레임(비율 맞춘 라운드 없고 흰 테두리) */
+        .crop-frame{
+          position:absolute; border:1.4px solid #fff; box-shadow:0 0 0 9999px rgba(0,0,0,.45) inset;
+          pointer-events:none; border-radius:6px;
+        }
+      `;
+      document.head.appendChild(style);
+
+      // ── 이미지 준비
+      const img = new Image();
+      img.onload = init; img.src = url;
+
+      // ── 뷰/상태
+      let ar = "1:1";              // 현재 선택된 비율
+      let zoom = 1;
+      let tx = 0, ty = 0;          // 이미지 이동(패닝) 오프셋 (뷰 좌표, px)
+      let isPanning = false, panStart = {x:0, y:0}, startTX = 0, startTY = 0;
+      let viewW = 0, viewH = 0;    // 캔버스 크기(= stage 내부)
+      let frame = null;            // 비율 프레임 DOM
+
+      function init() {
+        // stage 크기 → 캔버스 동기화
+        const rect = stage.getBoundingClientRect();
+        viewW = Math.max(1, Math.floor(rect.width));
+        viewH = Math.max(1, Math.floor(rect.height));
+        canvas.width = viewW;
+        canvas.height = viewH;
+
+        // 비율 프레임 생성
+        frame = document.createElement("div");
+        frame.className = "crop-frame";
+        stage.appendChild(frame);
+
+        // 초기 배치: 프레임 기준으로 이미지가 꽉 차도록
+        applyAspect(ar);
+        centerImage();
+        draw();
+        bindEvents();
+      }
+
+      // ── 그리기(현재 tx,ty,zoom,ar 기준으로 프레임 안만 보이게)
+      function draw() {
+        ctx.save();
+        ctx.fillStyle = "#111"; ctx.fillRect(0,0,viewW,viewH);
+        // 프레임 영역 계산
+        const {fx, fy, fw, fh} = frameRect();
+
+        // 이미지 그리기 (프레임 기준 클리핑)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(fx, fy, fw, fh);
+        ctx.clip();
+
+        const iw = img.naturalWidth, ih = img.naturalHeight;
+        const drawW = iw * zoom;
+        const drawH = ih * zoom;
+        const dx = Math.round(fx + tx - drawW/2 + fw/2);
+        const dy = Math.round(fy + ty - drawH/2 + fh/2);
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, dx, dy, drawW, drawH);
+        ctx.restore();
+
+        // 프레임 테두리는 DOM(frame)으로 표시하므로 여기서는 배경만
+        ctx.restore();
+      }
+
+      function frameRect(){
+        const r = parseAspect(ar);
+        let fw = viewW, fh = Math.round(fw * r.h / r.w);
+        if (fh > viewH) { fh = viewH; fw = Math.round(fh * r.w / r.h); }
+        const fx = Math.round((viewW - fw) / 2);
+        const fy = Math.round((viewH - fh) / 2);
+
+        // DOM 프레임 위치/크기 반영
+        if (frame) {
+          frame.style.left = `${fx}px`;
+          frame.style.top  = `${fy}px`;
+          frame.style.width = `${fw}px`;
+          frame.style.height= `${fh}px`;
+        }
+        return { fx, fy, fw, fh };
+      }
+
+      function parseAspect(s){
+        const [a,b] = s.split(":").map(n => Math.max(1, parseInt(n,10)||1));
+        return { w:a, h:b };
+      }
+
+      function applyAspect(next){
+        ar = next;
+        // 프레임 갱신 → 이미지가 최소 한 변은 프레임을 꽉 채우도록 줌 자동 맞춤
+        const {fw, fh} = frameRect();
+        const zx = fw / img.naturalWidth;
+        const zy = fh / img.naturalHeight;
+        zoom = Math.max(zx, zy);                 // 프레임을 최소한 가득 채움
+        zoom = Math.min(Math.max(zoom, 0.5), 4); // 안전 범위
+        zoomInput.value = String(zoom);
+        // 프레임 변경 시 위치도 중앙으로 정렬
+        centerImage();
+        draw();
+      }
+
+      function centerImage(){
+        tx = 0; ty = 0;
+      }
+
+      // ── 이벤트 바인딩
+      function bindEvents(){
+        // 패닝
+        canvas.addEventListener("pointerdown", (e)=>{
+          isPanning = true; canvas.setPointerCapture(e.pointerId);
+          panStart = { x: e.clientX, y: e.clientY };
+          startTX = tx; startTY = ty;
+          overlay.classList.add("is-active"); // 격자 보이기
+        });
+        const move = (e)=>{
+          if (!isPanning) return;
+          const dx = e.clientX - panStart.x;
+          const dy = e.clientY - panStart.y;
+          tx = startTX + dx;
+          ty = startTY + dy;
+          draw();
+        };
+        const up = ()=>{
+          if (!isPanning) return;
+          isPanning = false;
+          overlay.classList.remove("is-active");
+        };
+        canvas.addEventListener("pointermove", move);
+        canvas.addEventListener("pointerup", up);
+        canvas.addEventListener("pointercancel", up);
+        canvas.addEventListener("lostpointercapture", up);
+
+        // 휠 줌(커서 기준)
+        stage.addEventListener("wheel", (e)=>{
+          e.preventDefault();
+          const k = e.ctrlKey || e.metaKey ? 0.002 : 0.0015;
+          const s = Math.exp(-e.deltaY * k);
+          zoomAtPoint(s, e.clientX, e.clientY);
+        }, { passive:false });
+
+        // 창 리사이즈
+        const ro = new ResizeObserver(()=>{
+          const rect = stage.getBoundingClientRect();
+          viewW = Math.max(1, Math.floor(rect.width));
+          viewH = Math.max(1, Math.floor(rect.height));
+          canvas.width = viewW; canvas.height = viewH;
+          frameRect(); draw();
+        });
+        ro.observe(stage);
+
+        // 헤더 버튼들
+        backBtn.addEventListener("click", async ()=>{
+          cleanup();
+          try {
+            const picked = await openGalleryPicker();
+            const again  = await openCropModal(picked);
+            resolve(again);
+          } catch { reject(new Error("cancel")); }
+        });
+
+        nextBtn.addEventListener("click", async ()=>{
+          nextBtn.disabled = true;
+          title.textContent = "New post";
+          const out = await exportCroppedCanvas(); // Blob+w+h 반환
+          cleanup();
+          resolve(out);
+        });
+
+        globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
+
+        // 툴: 비율
+        ratioBtn.addEventListener("click",(e)=>{
+          e.stopPropagation();
+          ratioMenu.style.display = ratioMenu.style.display === "block" ? "none" : "block";
+          zoomWrap.style.display = "none";
+        });
+        ratioMenu.querySelectorAll("button").forEach(b=>{
+          b.addEventListener("click",()=>{
+            applyAspect(b.dataset.ar);
+            ratioMenu.style.display = "none";
+          });
+        });
+
+        // 툴: 줌
+        zoomBtn.addEventListener("click",(e)=>{
+          e.stopPropagation();
+          zoomWrap.style.display = zoomWrap.style.display === "block" ? "none" : "block";
+          ratioMenu.style.display = "none";
+        });
+        zoomInput.addEventListener("input", ()=>{
+          const next = Math.max(0.5, Math.min(4, parseFloat(zoomInput.value)||1));
+          const rect = stage.getBoundingClientRect();
+          zoomAtPoint(next/zoom, rect.left + rect.width/2, rect.top + rect.height/2);
+        });
+
+        // 메뉴 외 영역 클릭 시 닫기
+        back.addEventListener("click", (e)=>{
+          if (!tools.contains(e.target)) {
+            ratioMenu.style.display = "none";
+            zoomWrap.style.display = "none";
+          }
+        });
+      }
+
+      function zoomAtPoint(scale, cx, cy){
+        const before = zoom;
+        const next = Math.max(0.5, Math.min(4, before * scale));
+        if (next === before) return;
+        // 커서 기준 확대/축소: 프레임 좌표로 변환
+        const {fx, fy, fw, fh} = frameRect();
+        const px = cx - stage.getBoundingClientRect().left - fx;
+        const py = cy - stage.getBoundingClientRect().top  - fy;
+        // world 상 이미지 기준점(프레임 공간)
+        const iw = img.naturalWidth * before;
+        const ih = img.naturalHeight * before;
+        const dx = fx + tx - iw/2 + fw/2;
+        const dy = fy + ty - ih/2 + fh/2;
+        const wx = (px - dx) / before;
+        const wy = (py - dy) / before;
+
+        zoom = next;
+        const niw = img.naturalWidth * zoom;
+        const nih = img.naturalHeight * zoom;
+        const ndx = px - wx * zoom;
+        const ndy = py - wy * zoom;
+        tx = ndx - (fx - fw/2) + niw/2;
+        ty = ndy - (fy - fh/2) + nih/2;
+
+        overlay.classList.add("is-active");
+        draw();
+        clearTimeout(zoomAtPoint._t);
+        zoomAtPoint._t = setTimeout(()=> overlay.classList.remove("is-active"), 120);
+      }
+
+      // 실제 잘라내기: 프레임 영역을 이미지를 기준으로 산출 → 고정 해상도로 내보냄
+      async function exportCroppedCanvas(){
+        const {fx, fy, fw, fh} = frameRect();
+
+        // 이미지가 캔버스에 그려질 때의 좌상단 좌표(dx,dy)와 크기
+        const iw = img.naturalWidth * zoom;
+        const ih = img.naturalHeight * zoom;
+        const dx = fx + tx - iw/2 + fw/2;
+        const dy = fy + ty - ih/2 + fh/2;
+
+        // 프레임 → 원본 이미지 좌표계로 역변환
+        const sx = Math.max(0, Math.round((fx - dx)));
+        const sy = Math.max(0, Math.round((fy - dy)));
+        const sw = Math.round(Math.min(fw, iw - sx));
+        const sh = Math.round(Math.min(fh, ih - sy));
+
+        // 원본 좌표계로 환산(zoom을 나눔)
+        const srcX = Math.max(0, Math.floor(sx / zoom));
+        const srcY = Math.max(0, Math.floor(sy / zoom));
+        const srcW = Math.max(1, Math.floor(sw / zoom));
+        const srcH = Math.max(1, Math.floor(sh / zoom));
+
+        // 출력 크기(긴 변 1080 기준)
+        const scaleOut = 1080 / Math.max(fw, fh);
+        const outW = Math.round(fw * scaleOut);
+        const outH = Math.round(fh * scaleOut);
+
+        const out = document.createElement("canvas");
+        out.width = outW; out.height = outH;
+        const octx = out.getContext("2d");
+        octx.imageSmoothingQuality = "high";
+        octx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+
+        const blob = await new Promise(res=> out.toBlob(b=>res(b), "image/png", 0.95));
+        return { blob, w: outW, h: outH };
+      }
 
       function cleanup(){
-        URL.revokeObjectURL(url);
+        try { URL.revokeObjectURL(url); } catch {}
         window.removeEventListener("keydown", onEsc);
+        style.remove();
         back.remove();
         document.body.classList.remove("is-cropping");
       }
 
-      // 공통 닫기 동작(오버레이 클릭/ESC)
+      // 공통 닫기
       const onBackdropClick = (e)=>{ if (e.target === back){ cleanup(); reject(new Error("cancel")); } };
       const onEsc = (e)=>{ if (e.key === "Escape"){ cleanup(); reject(new Error("cancel")); } };
       back.addEventListener("click", onBackdropClick);
       window.addEventListener("keydown", onEsc);
 
-      // 뒤로가기: 갤러리로 복귀(기존 로직 유지)
-      backBtn.addEventListener("click", async ()=>{
-        cleanup();
-        try{
-          const picked = await openGalleryPicker(); // 뒤로가면 다시 1단계
-          const again  = await openCropModal(picked);
-          resolve(again);
-        }catch{ reject(new Error("cancel")); }
+      // 전환 애니메이션(Compose로 넘어갈 때만)
+      nextBtn.addEventListener("click", ()=>{
+        // 애니메이션은 export 후 cleanup 시점에 처리하므로 여기서는 생략
       });
-
-      // 다음
-      nextBtn.addEventListener("click", async ()=>{
-        nextBtn.disabled = true;
-        title.textContent = "New post";
-        async function exportBlob(){
-          try{
-            const b = await new Promise(res => canvas.toBlob(res, "image/png", 1));
-            const blobOut = b || blob; // fallback
-            return { blob: blobOut, w: canvas.width, h: canvas.height };
-          }catch{ return { blob, w: canvas.width, h: canvas.height }; }
-        }
-        // 모바일에서는 모션 없이 바로 종료
-        const noMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches || window.innerWidth <= 640;
-        if (noMotion){
-          const out = await exportBlob();
-          cleanup();
-          resolve(out);
-          return;
-        }
-        // 1) 먼저 너비를 950px로 부드럽게 확장
-        // reflow 보장
-        shell.getBoundingClientRect();
-        shell.classList.add("is-grow-to-compose");
-        // 2) 트랜지션 종료 후 닫고 step3로 진행
-        const onEnd = async (e)=>{
-          if (e.propertyName !== "width") return;
-          shell.removeEventListener("transitionend", onEnd);
-          const out = await exportBlob();
-          cleanup();
-          resolve(out);
-        };
-        shell.addEventListener("transitionend", onEnd);
-      });
-
-      // 전역 X 클릭 닫기
-      globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
-
-      document.body.append(back);
     });
   }
+
 
   // 🔁 3-스텝 흐름: Gallery → Crop → Compose (← 뒤로가면 한 스텝씩 복귀)
   async function runThreeStepFlow(){
