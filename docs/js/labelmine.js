@@ -2701,7 +2701,7 @@ function goMineAfterShare(label = getLabel()) {
       // ── 그리기(현재 tx,ty,zoom,ar 기준으로 프레임 안만 보이게)
       function draw() {
         ctx.save();
-        ctx.fillStyle = "#111"; ctx.fillRect(0,0,viewW,viewH);
+        ctx.fillStyle = "transparent" ; ctx.fillRect(0,0,viewW,viewH);
         // 프레임 영역 계산
         const {fx, fy, fw, fh} = frameRect();
 
@@ -2753,6 +2753,7 @@ function goMineAfterShare(label = getLabel()) {
         const zx = fw / img.naturalWidth;
         const zy = fh / img.naturalHeight;
         zoom = Math.max(zx, zy);                 // 프레임을 최소한 가득 채움
+        if (!isFinite(zoom) || zoom <= 0) zoom = 1;
         zoom = Math.min(Math.max(zoom, 0.5), 4); // 안전 범위
         zoomInput.value = String(zoom);
         // 프레임 변경 시 위치도 중앙으로 정렬
