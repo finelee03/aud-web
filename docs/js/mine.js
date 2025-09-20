@@ -865,17 +865,20 @@
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
   }[m]));
 
-  function styleFromView(item){
-    const mode = (item.view_mode || item?.view?.mode || "").toLowerCase();
-    const fit  = (mode === "contain") ? "contain" : "cover";
-    const z  = Math.max(0.2, Math.min(8, Number(item.view_zoom ?? item?.view?.zoom ?? 1)));
-    const vx = Math.max(-100, Math.min(100, Number(item.view_x ?? item?.view?.x ?? 0)));
-    const vy = Math.max(-100, Math.min(100, Number(item.view_y ?? item?.view?.y ?? 0)));
-    return `object-fit:${fit};transform:translate(${vx}%, ${vy}%) scale(${z});transform-origin:center center;will-change:transform;`;
-  }
-
   // 카드 마크업(댓글 표시 제거)
-  function cardHTML(item) {
+  
+  // === [ADD] view meta → inline style helper ===
+  function styleFromView(item){
+    try {
+      const mode = String(item.view_mode || item?.view?.mode || "").toLowerCase();
+      const fit  = (mode === "contain") ? "contain" : "cover";
+      const z  = Math.max(0.2, Math.min(8, Number(item.view_zoom ?? item?.view?.zoom ?? 1)));
+      const vx = Math.max(-100, Math.min(100, Number(item.view_x ?? item?.view?.x ?? 0)));
+      const vy = Math.max(-100, Math.min(100, Number(item.view_y ?? item?.view?.y ?? 0)));
+      return `object-fit:${fit};transform:translate(${vx}%, ${vy}%) scale(${z});transform-origin:center center;will-change:transform;`;
+    } catch { return ""; }
+  }
+function cardHTML(item) {
     const liked = !!item.liked;
     const likes = Number(item.likes || 0);
     const safeLabel = (item.label || '').replace(/[^\w-]+/g, '');
@@ -893,7 +896,10 @@
               <span class="ico ico-heart" aria-hidden="true"></span>
               <span class="count" data-like-count data-count="${likes}">${fmtCount(likes)}</span>
             </div>
-            <button class="btn-del-thumb" type="button" aria-label="Delete" ${mine ? '' : 'hidden'} data-del="${item.id}">
+
+            <!-- [ADD] 내 게시물에만 노출되는 삭제 버튼 -->
+            <button class="btn-del-thumb" type="button" aria-label="Delete"
+                    ${mine ? '' : 'hidden'} data-del="${item.id}">
             </button>
           </div>
         </div>

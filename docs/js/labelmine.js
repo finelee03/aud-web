@@ -1917,10 +1917,6 @@ function goMineAfterShare(label = getLabel()) {
     fd.append("createdAt", String(now()));
     fd.append("ns", ns);
     fd.append("visibility", "public");
-    fd.append("view_mode", viewMode);              // "cover" | "contain"
-    fd.append("view_zoom", String(viewZoom));      // 예: "1.2"
-    fd.append("view_x",    String(viewX));         // -100 ~ 100
-    fd.append("view_y",    String(viewY));         // -100 ~ 100
     if (width)  fd.append("width",  String(width));
     if (height) fd.append("height", String(height));
     if (csrf)   fd.append("_csrf",  csrf);
@@ -1936,6 +1932,20 @@ function goMineAfterShare(label = getLabel()) {
       fd.append("bg", safe);        // 신식
       fd.append("bg_color", safe);  // 구식 호환
       fd.append("bgHex", safe);     // 일부 백엔드 호환
+    }
+
+
+    // === [ADD] Feed 표시용 View Meta ===
+    {
+      const v = (window.__LM_VIEW || {});
+      const mode = (String(v.mode).toLowerCase() === "contain") ? "contain" : "cover";
+      const zoom = Math.max(0.2, Math.min(8, Number(v.zoom ?? 1)));
+      const vx   = Math.max(-100, Math.min(100, Number(v.x ?? 0)));
+      const vy   = Math.max(-100, Math.min(100, Number(v.y ?? 0)));
+      fd.append("view_mode", mode);
+      fd.append("view_zoom", String(zoom));
+      fd.append("view_x",    String(vx));
+      fd.append("view_y",    String(vy));
     }
 
     // 썸네일은 있으면 그대로
@@ -2319,16 +2329,18 @@ function goMineAfterShare(label = getLabel()) {
       applyBg('#FFFFFF');
 
       right.append(acct, caption, meta, picker.el);
-
       // === [ADD] Feed 표시용 View Controls (zoom/pan/mode) ===
-      let viewMode = "cover";    // "cover"|"contain"
+      let viewMode = "cover";    // "cover" | "contain"
       let viewZoom = 1.0;        // 0.2 ~ 8.0
-      let viewX = 0;             // -100% ~ 100% (translate 기준)
+      let viewX = 0;             // -100% ~ 100%
       let viewY = 0;
 
-      const toolbar = document.createElement("div");
-      toolbar.className = "im-viewbar";
-      toolbar.innerHTML = `
+      /* 전역 상태(업로드 함수에서 읽음) */
+      window.__LM_VIEW = { mode: viewMode, zoom: viewZoom, x: viewX, y: viewY };
+
+      const viewbar = document.createElement("div");
+      viewbar.className = "im-viewbar";
+      viewbar.innerHTML = `
         <div class="im-viewbar__group">
           <button type="button" data-view="contain" class="im-btn">맞춤</button>
           <button type="button" data-view="cover"   class="im-btn is-active">채움</button>
@@ -2340,46 +2352,41 @@ function goMineAfterShare(label = getLabel()) {
         </div>
         <div class="im-viewbar__hint">이미지를 끌어 패닝</div>
       `;
-      // stage/img 핸들
-      const stageImg = stage.querySelector("img");
 
-      // 내부 유틸
       function clamp(n, a, b){ return Math.min(b, Math.max(a, n)); }
+      function syncGlobal(){ window.__LM_VIEW = { mode: viewMode, zoom: viewZoom, x: viewX, y: viewY }; }
       function applyView(){
         const fit = (viewMode === "contain") ? "contain" : "cover";
         const t = `translate(${viewX}%, ${viewY}%) scale(${viewZoom})`;
-        // 인라인 스타일로만 덮어씀(기존 CSS 불변)
         Object.assign(stageImg.style, {
           objectFit: fit,
           transform: t,
           transformOrigin: "center center",
           willChange: "transform",
         });
-        toolbar.querySelector(".im-viewbar__readout").textContent = `${Math.round(viewZoom*100)}%`;
+        const ro = viewbar.querySelector(".im-viewbar__readout");
+        if (ro) ro.textContent = `${Math.round(viewZoom*100)}%`;
+        syncGlobal();
       }
-      // 버튼 동작
-      toolbar.addEventListener("click", (e)=>{
+      viewbar.addEventListener("click", (e)=>{
         const btn = e.target.closest("button");
         if (!btn) return;
         if (btn.dataset.view){
           viewMode = btn.dataset.view;
-          toolbar.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('is-active', b===btn));
+          viewbar.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('is-active', b===btn));
           applyView();
         } else if (btn.dataset.zoom){
           const dir = btn.dataset.zoom === "+1" ? 1 : -1;
-          // 계단식 10% 스텝
           viewZoom = clamp(Math.round((viewZoom + dir*0.1)*10)/10, 0.2, 8);
           applyView();
         }
       });
-      // 드래그 패닝
       let drag=false, sx=0, sy=0, bx=viewX, by=viewY;
       function onDown(ev){ drag=true; sx=ev.clientX||ev.touches?.[0]?.clientX; sy=ev.clientY||ev.touches?.[0]?.clientY; bx=viewX; by=viewY; ev.preventDefault(); }
       function onMove(ev){
         if(!drag) return;
         const x=(ev.clientX||ev.touches?.[0]?.clientX) - sx;
         const y=(ev.clientY||ev.touches?.[0]?.clientY) - sy;
-        // px → % : 대략적 비율(스테이지 너비 대비). 너무 민감하지 않게 1px≈0.1%로 보정.
         viewX = clamp(bx + x*0.1, -100, 100);
         viewY = clamp(by + y*0.1, -100, 100);
         applyView();
@@ -2392,9 +2399,7 @@ function goMineAfterShare(label = getLabel()) {
       window.addEventListener("mouseup", onUp, {passive:true});
       window.addEventListener("touchend", onUp, {passive:true});
 
-      // mount
-      right.append(toolbar);
-      // 초기 적용
+      right.append(viewbar);
       applyView();
 
       body.append(left, right);
