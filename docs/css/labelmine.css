@@ -520,6 +520,8 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
   z-index:5600;
 }
 
+.cm-stage{ position:relative; }   ㄴ
+
 /* 공통 버튼 */
 .crop-btn{
   width:40px; height:40px; border-radius:9999px;

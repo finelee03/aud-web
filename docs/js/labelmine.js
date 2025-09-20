@@ -629,7 +629,7 @@ ensureReady(() => whenStoreReady(async () => {
     return { clamp, wheelDeltaPx, hexToRgb, rgbToHex, hsvToRgb, rgbToHsv, dataURLtoBlob, blobToImage, makeThumbnail, el, trimAndPadToSquare, canvasToBlob };
   })();
 
-  function trimAndPadToSquare(srcCanvas, { padding = 0.08, size = 1024, bg = null } = {}) {
+  function trimAndPadToSquare(srcCanvas, { padding = 0, size = 1024, bg = null } = {}) {
   const w = srcCanvas.width, h = srcCanvas.height;
   const ctx = srcCanvas.getContext('2d', { willReadFrequently: true });
   const { data } = ctx.getImageData(0, 0, w, h);
@@ -1897,7 +1897,7 @@ function goMineAfterShare(label = getLabel()) {
 
       // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
       const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
-      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0.08, size: target });
+      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0, size: target });
 
       // 캔버스 → Blob
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
