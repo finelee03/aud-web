@@ -2276,11 +2276,29 @@ function goMineAfterShare(label = getLabel()) {
       // Body (좌: 이미지, 우: 작성 + 컬러)
       const body  = document.createElement("div"); body.className = "im-body";
       const left  = document.createElement("div"); left.className = "im-left";
-      const stage = document.createElement("div"); stage.className = "im-stage has-image";
-const viewport = document.createElement("div"); viewport.className = "im-viewport"; viewport.style.cssText="position:relative;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px;";
-const canvas = document.createElement("div"); canvas.className="im-canvas"; canvas.style.cssText="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;cursor:grab;";
-const img   = document.createElement("img"); img.src = url; img.alt = ""; img.style.cssText="display:block;max-width:none;max-height:none;user-select:none;pointer-events:none;";
-canvas.append(img); viewport.append(canvas); stage.append(viewport); left.append(stage);
+      const stage = document.createElement("div");
+      stage.className = "im-stage";
+
+      // viewport/canvas 래퍼 (크롭/줌 대상)
+      const viewport = document.createElement("div");
+      viewport.className = "im-viewport";
+      viewport.style.cssText = "position:relative; width:100%; height:100%; overflow:hidden; background:#111; border-radius:12px;";
+
+      const canvas = document.createElement("div");
+      canvas.className = "im-canvas";
+      canvas.style.cssText = "position:absolute; left:50%; top:50%; transform:translate(-50%, -50%) scale(1); transform-origin:center center; cursor:grab;";
+
+      const stageImg = document.createElement("img");
+      stageImg.alt = "";
+      stageImg.style.cssText = "display:block; max-width:none; max-height:none; user-select:none; pointer-events:none;";
+
+      canvas.appendChild(stageImg);
+      viewport.appendChild(canvas);
+      stage.appendChild(viewport);
+      left.appendChild(stage);
+
+      // 이미지 소스 연결(기존 url 사용)
+      stageImg.src = url;
 
       const right = document.createElement("div"); right.className = "im-right";
       const acct  = document.createElement("div"); acct.className  = "im-acct";
@@ -2317,53 +2335,150 @@ canvas.append(img); viewport.append(canvas); stage.append(viewport); left.append
       applyBg('#FFFFFF');
 
       right.append(acct, caption, meta, picker.el);
-      
-      // ── Zoom/Pan utilities (modal preview only; upload payload unaffected)
-      const VIEW_KEY = "imodal:view";
+
+      // ─────────────────────────────────────────────
+      //  줌/팬 상태 및 유틸
+      // ─────────────────────────────────────────────
+      const VIEW_KEY = "imodal:view"; // { s, tx, ty }
       let s = 1, tx = 0, ty = 0;
-      function applyTransform(){ canvas.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${s})`; }
-      function fitToViewport(){
-        const v = viewport.getBoundingClientRect();
-        const nw = img.naturalWidth || 1, nh = img.naturalHeight || 1;
-        const sw = v.width / nw, sh = v.height / nh;
-        s = Math.min(sw, sh); tx = 0; ty = 0; applyTransform();
+
+      function applyTransform() {
+        canvas.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${s})`;
       }
-      function reset100(){ s=1; tx=0; ty=0; applyTransform(); }
-      function zoomBy(delta, cx, cy){
-        const prev = s; s = Math.min(8, Math.max(0.2, s * (delta > 0 ? 1.1 : 0.9)));
-        const r = viewport.getBoundingClientRect();
-        const dx = cx - (r.left + r.width/2), dy = cy - (r.top + r.height/2);
-        tx = tx - dx * (s - prev) / s; ty = ty - dy * (s - prev) / s; applyTransform();
+
+      function fitToViewport() {
+        const vRect = viewport.getBoundingClientRect();
+        const naturalW = stageImg.naturalWidth || 1;
+        const naturalH = stageImg.naturalHeight || 1;
+        const scaleW = vRect.width / naturalW;
+        const scaleH = vRect.height / naturalH;
+        s = Math.min(scaleW, scaleH);
+        tx = 0; ty = 0;
+        applyTransform();
       }
-      function persistView(){ try{ localStorage.setItem(VIEW_KEY, JSON.stringify({s,tx,ty})); }catch{} }
+
+      function reset100() { s = 1; tx = 0; ty = 0; applyTransform(); }
+
+      function zoomBy(delta, cx, cy) {
+        const prev = s;
+        s = Math.min(8, Math.max(0.2, s * (delta > 0 ? 1.1 : 0.9)));
+
+        const vRect = viewport.getBoundingClientRect();
+        const dx = cx - (vRect.left + vRect.width/2);
+        const dy = cy - (vRect.top  + vRect.height/2);
+
+        tx = tx - dx * (s - prev) / s;
+        ty = ty - dy * (s - prev) / s;
+        applyTransform();
+      }
+
+      function persistView(){ try{ localStorage.setItem(VIEW_KEY, JSON.stringify({ s, tx, ty })); }catch{} }
       function restoreView(){
-        try{ const v = JSON.parse(localStorage.getItem(VIEW_KEY)||"null");
-          if (v && typeof v.s === "number"){ s=v.s; tx=v.tx||0; ty=v.ty||0; applyTransform(); } else { fitToViewport(); }
-        } catch { fitToViewport(); }
+        try{
+          const saved = JSON.parse(localStorage.getItem(VIEW_KEY) || "null");
+          if (saved && typeof saved.s === "number"){ s=saved.s; tx=saved.tx||0; ty=saved.ty||0; applyTransform(); }
+          else { fitToViewport(); }
+        }catch{ fitToViewport(); }
       }
-      viewport.addEventListener("wheel", (e)=>{ if(!img.src) return; e.preventDefault(); zoomBy(e.deltaY, e.clientX, e.clientY); persistView(); }, {passive:false});
-      let dragging=false, sx=0, sy=0, bx=0, by=0;
-      viewport.addEventListener("pointerdown", (e)=>{ if(!img.src) return; dragging=true; canvas.style.cursor="grabbing"; sx=e.clientX; sy=e.clientY; bx=tx; by=ty; viewport.setPointerCapture(e.pointerId); });
-      viewport.addEventListener("pointermove", (e)=>{ if(!dragging) return; tx = bx + (e.clientX - sx); ty = by + (e.clientY - sy); applyTransform(); });
-      viewport.addEventListener("pointerup",   (e)=>{ if(!dragging) return; dragging=false; canvas.style.cursor="grab"; persistView(); });
-      // Toolbar buttons
-      (function(){
-        const tools = document.createElement("div");
-        tools.className = "im-tools";
-        tools.style.cssText = "display:flex;gap:.5rem;margin-top:.75rem;";
-        function btn(t, ttl, fn){ const b=document.createElement("button"); b.type="button"; b.textContent=t; b.title=ttl; b.style.cssText="padding:.4rem .6rem;border-radius:.5rem;border:1px solid var(--line,#333);background:#1c1c1c;color:#eee;"; b.addEventListener("click", fn); return b; }
-        const centerX = ()=> viewport.getBoundingClientRect().left + viewport.clientWidth/2;
-        const centerY = ()=> viewport.getBoundingClientRect().top  + viewport.clientHeight/2;
-        tools.append(
-          btn("+","줌인", ()=>{ zoomBy(-1, centerX(), centerY()); persistView(); }),
-          btn("–","줌아웃",()=>{ zoomBy(+1, centerX(), centerY()); persistView(); }),
-          btn("맞춤","전체 보이기",()=>{ fitToViewport(); persistView(); }),
-          btn("1:1","원본 배율",   ()=>{ reset100(); persistView(); })
-        );
-        right.append(tools);
-      })();
-      img.addEventListener("load", ()=>{ fitToViewport(); restoreView(); }, { once:false });
-    body.append(left, right);
+
+      // ─────────────────────────────────────────────
+      //  이벤트(휠 줌, 드래그 팬, 터치 핀치)
+      // ─────────────────────────────────────────────
+      viewport.addEventListener("wheel", (e) => {
+        if (!stageImg.src) return;
+        if (!e.ctrlKey) {
+          e.preventDefault();
+          zoomBy(e.deltaY, e.clientX, e.clientY);
+          persistView();
+        }
+      }, { passive:false });
+
+      let dragging=false, startX=0, startY=0, baseTx=0, baseTy=0;
+      viewport.addEventListener("pointerdown", (e) => {
+        if (!stageImg.src) return;
+        dragging = true; canvas.style.cursor = "grabbing";
+        startX = e.clientX; startY = e.clientY; baseTx = tx; baseTy = ty;
+        viewport.setPointerCapture(e.pointerId);
+      });
+      viewport.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        tx = baseTx + (e.clientX - startX);
+        ty = baseTy + (e.clientY - startY);
+        applyTransform();
+      });
+      viewport.addEventListener("pointerup", () => {
+        if (!dragging) return;
+        dragging = false; canvas.style.cursor = "grab";
+        persistView();
+      });
+
+      // 터치 2점 핀치
+      let pinch = null;
+      viewport.addEventListener("touchstart", (e) => {
+        if (e.touches.length === 2) {
+          const [a, b] = e.touches;
+          const cx = (a.clientX + b.clientX)/2;
+          const cy = (a.clientY + b.clientY)/2;
+          pinch = { dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), s0: s, cx, cy };
+        }
+      }, { passive:true });
+
+      viewport.addEventListener("touchmove", (e) => {
+        if (pinch && e.touches.length === 2) {
+          e.preventDefault();
+          const [a, b] = e.touches;
+          const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+          const factor = dist / Math.max(1, pinch.dist);
+          const prev = s;
+          s = Math.min(8, Math.max(0.2, pinch.s0 * factor));
+
+          const vRect = viewport.getBoundingClientRect();
+          const dx = pinch.cx - (vRect.left + vRect.width/2);
+          const dy = pinch.cy - (vRect.top  + vRect.height/2);
+          tx = tx - dx * (s - prev) / s;
+          ty = ty - dy * (s - prev) / s;
+          applyTransform();
+        }
+      }, { passive:false });
+
+      viewport.addEventListener("touchend", () => {
+        if (pinch) { persistView(); pinch = null; }
+      });
+
+      // ─────────────────────────────────────────────
+      //  보조 버튼(슬라이더 없음)
+      // ─────────────────────────────────────────────
+      const tools = document.createElement("div");
+      tools.className = "im-tools";
+      tools.style.cssText = "display:flex; gap:.5rem; margin-top:.75rem;";
+
+      function makeBtn(text, title, onClick) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = text;
+        b.title = title;
+        b.style.cssText = "padding:.4rem .6rem; border-radius:.5rem; border:1px solid var(--line, #333); background:#1c1c1c; color:#eee;";
+        b.addEventListener("click", onClick);
+        return b;
+      }
+      const centerX = () => viewport.getBoundingClientRect().left + viewport.clientWidth/2;
+      const centerY = () => viewport.getBoundingClientRect().top  + viewport.clientHeight/2;
+
+      const btnZoomIn  = makeBtn("+",  "줌인",  () => { zoomBy(-1, centerX(), centerY()); persistView(); });
+      const btnZoomOut = makeBtn("–",  "줌아웃", () => { zoomBy(+1, centerX(), centerY()); persistView(); });
+      const btnFit     = makeBtn("맞춤","전체 보이기", () => { fitToViewport(); persistView(); });
+      const btn100     = makeBtn("1:1", "원본 배율",   () => { reset100(); persistView(); });
+
+      tools.append(btnZoomIn, btnZoomOut, btnFit, btn100);
+      right.append(tools);
+
+      // 이미지 로드되면 맞춤 후 저장값 복원
+      stageImg.addEventListener("load", () => {
+        fitToViewport();
+        restoreView();
+      });
+
+      body.append(left, right);
       shell.append(head, body);
       back.append(shell);
 
@@ -2433,24 +2548,27 @@ canvas.append(img); viewport.append(canvas); stage.append(viewport); left.append
     const body  = document.createElement("div"); body.className  = "im-body";
     const left  = document.createElement("div"); left.className  = "im-left";
     const stage = document.createElement("div"); stage.className = "im-stage";
-const dummy = document.createElement("div"); dummy.className = "im-stage-dummy";
-const chooser = document.createElement("div"); chooser.className = "im-chooser";
-const hint  = document.createElement("div"); hint.className = "im-stage-hint"; hint.textContent = "파일을 드래그하거나 아래 버튼으로 선택하세요";
-const pick  = document.createElement("button"); pick.className = "feedc__pick"; pick.type="button"; pick.textContent = "이미지 선택";
-chooser.append(hint, pick);
-// ▼ viewport/canvas for zoom & pan
-const viewport = document.createElement("div");
-viewport.className = "im-viewport";
-viewport.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px;";
-const canvas = document.createElement("div");
-canvas.className = "im-canvas";
-canvas.style.cssText = "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;cursor:grab;";
-const stageImg = document.createElement("img");
-stageImg.alt=""; stageImg.style.cssText="display:block;max-width:none;max-height:none;user-select:none;pointer-events:none;";
-canvas.appendChild(stageImg);
-viewport.appendChild(canvas);
-stage.append(dummy, chooser, viewport);
-left.append(stage);
+    const viewport = document.createElement("div");
+    viewport.className = "im-viewport";         // overflow: hidden
+    viewport.style.cssText = "position:relative; width:100%; height:100%; overflow:hidden; background:#111; border-radius:12px;";
+
+    const canvas = document.createElement("div");
+    canvas.className = "im-canvas";              // transform 대상
+    canvas.style.cssText = "position:absolute; left:50%; top:50%; transform:translate(-50%, -50%) scale(1); transform-origin:center center; cursor:grab;";
+
+    const stageImg = document.createElement("img");
+    stageImg.alt = "";
+    stageImg.style.cssText = "display:block; max-width:none; max-height:none; user-select:none; pointer-events:none;";
+
+    const dummy = document.createElement("div"); dummy.className = "im-stage-dummy";
+    const chooser = document.createElement("div"); chooser.className = "im-chooser";
+    const hint  = document.createElement("div"); hint.className = "im-stage-hint"; hint.textContent = "파일을 드래그하거나 아래 버튼으로 선택하세요";
+    const pick  = document.createElement("button"); pick.className = "feedc__pick"; pick.type="button"; pick.textContent = "이미지 선택";
+    chooser.append(hint, pick);
+    canvas.appendChild(stageImg);
+    viewport.appendChild(canvas);
+    stage.append(viewport, chooser);
+    left.append(stage);
 
     const right = document.createElement("div"); right.className = "im-right";
     const acct  = document.createElement("div"); acct.className  = "im-acct";
@@ -2477,52 +2595,169 @@ left.append(stage);
 
     right.append(acct, caption, meta, attach, picker.el);
 
-    
-    // ── Zoom/Pan utilities (modal preview only; upload payload unaffected)
-    const VIEW_KEY = "imodal:view";
-    let s = 1, tx = 0, ty = 0;
-    function applyTransform(){ canvas.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${s})`; }
-    function fitToViewport(){
-      const v = viewport.getBoundingClientRect();
-      const nw = stageImg.naturalWidth || 1, nh = stageImg.naturalHeight || 1;
-      const sw = v.width / nw, sh = v.height / nh;
-      s = Math.min(sw, sh); tx = 0; ty = 0; applyTransform();
+    // ─────────────────────────────────────────────
+    //  줌/팬 상태 및 유틸
+    // ─────────────────────────────────────────────
+    const VIEW_KEY = "imodal:view"; // { s, tx, ty } 저장
+    let s = 1;      // scale
+    let tx = 0;     // px translateX (canvas 기준)
+    let ty = 0;     // px translateY
+
+    function applyTransform() {
+      canvas.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${s})`;
     }
-    function reset100(){ s=1; tx=0; ty=0; applyTransform(); }
-    function zoomBy(delta, cx, cy){
-      const prev = s; s = Math.min(8, Math.max(0.2, s * (delta > 0 ? 1.1 : 0.9)));
-      const r = viewport.getBoundingClientRect();
-      const dx = cx - (r.left + r.width/2), dy = cy - (r.top + r.height/2);
-      tx = tx - dx * (s - prev) / s; ty = ty - dy * (s - prev) / s; applyTransform();
+
+    function fitToViewport() {
+      // 이미지/뷰포트 실제 크기 기준으로 '맞춤' 계산
+      const vRect = viewport.getBoundingClientRect();
+      const naturalW = stageImg.naturalWidth || 1;
+      const naturalH = stageImg.naturalHeight || 1;
+      const scaleW = vRect.width / naturalW;
+      const scaleH = vRect.height / naturalH;
+      s = Math.min(scaleW, scaleH);   // contain
+      tx = 0; ty = 0;
+      applyTransform();
     }
-    function persistView(){ try{ localStorage.setItem(VIEW_KEY, JSON.stringify({s,tx,ty})); }catch{} }
-    function restoreView(){
-      try{ const v = JSON.parse(localStorage.getItem(VIEW_KEY)||"null");
-        if (v && typeof v.s === "number"){ s=v.s; tx=v.tx||0; ty=v.ty||0; applyTransform(); } else { fitToViewport(); }
+
+    function reset100() {
+      s = 1; tx = 0; ty = 0; applyTransform();
+    }
+
+    function zoomBy(delta, cx, cy) {
+      // cx, cy: 뷰포트 좌표계에서 마우스 위치 (줌 중심 유지)
+      const prev = s;
+      s = Math.min(8, Math.max(0.2, s * (delta > 0 ? 1.1 : 0.9)));
+
+      // 줌 중심을 유지하도록 tx/ty 보정
+      // 뷰포트 중심 좌표계로 변환
+      const vRect = viewport.getBoundingClientRect();
+      const dx = cx - (vRect.left + vRect.width/2);
+      const dy = cy - (vRect.top  + vRect.height/2);
+      // 스케일 변화에 따른 평행이동 보정
+      tx = tx - dx * (s - prev) / s;
+      ty = ty - dy * (s - prev) / s;
+
+      applyTransform();
+    }
+
+    function persistView() {
+      try { localStorage.setItem(VIEW_KEY, JSON.stringify({ s, tx, ty })); } catch {}
+    }
+    function restoreView() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(VIEW_KEY) || "null");
+        if (saved && typeof saved.s === "number") {
+          s = saved.s; tx = saved.tx||0; ty = saved.ty||0; applyTransform();
+        } else {
+          fitToViewport();
+        }
       } catch { fitToViewport(); }
     }
-    viewport.addEventListener("wheel", (e)=>{ if(!stageImg.src) return; e.preventDefault(); zoomBy(e.deltaY, e.clientX, e.clientY); persistView(); }, {passive:false});
-    let dragging=false, sx=0, sy=0, bx=0, by=0;
-    viewport.addEventListener("pointerdown", (e)=>{ if(!stageImg.src) return; dragging=true; canvas.style.cursor="grabbing"; sx=e.clientX; sy=e.clientY; bx=tx; by=ty; viewport.setPointerCapture(e.pointerId); });
-    viewport.addEventListener("pointermove", (e)=>{ if(!dragging) return; tx = bx + (e.clientX - sx); ty = by + (e.clientY - sy); applyTransform(); });
-    viewport.addEventListener("pointerup",   (e)=>{ if(!dragging) return; dragging=false; canvas.style.cursor="grab"; persistView(); });
-    // Toolbar buttons
-    (function(){
-      const tools = document.createElement("div");
-      tools.className = "im-tools";
-      tools.style.cssText = "display:flex;gap:.5rem;margin-top:.75rem;";
-      function btn(t, ttl, fn){ const b=document.createElement("button"); b.type="button"; b.textContent=t; b.title=ttl; b.style.cssText="padding:.4rem .6rem;border-radius:.5rem;border:1px solid var(--line,#333);background:#1c1c1c;color:#eee;"; b.addEventListener("click", fn); return b; }
-      const centerX = ()=> viewport.getBoundingClientRect().left + viewport.clientWidth/2;
-      const centerY = ()=> viewport.getBoundingClientRect().top  + viewport.clientHeight/2;
-      tools.append(
-        btn("+","줌인", ()=>{ zoomBy(-1, centerX(), centerY()); persistView(); }),
-        btn("–","줌아웃",()=>{ zoomBy(+1, centerX(), centerY()); persistView(); }),
-        btn("맞춤","전체 보이기",()=>{ fitToViewport(); persistView(); }),
-        btn("1:1","원본 배율",   ()=>{ reset100(); persistView(); })
-      );
-      right.append(tools);
-    })();
-    stageImg.addEventListener("load", ()=>{ fitToViewport(); restoreView(); }, { once:false });
+
+    // ─────────────────────────────────────────────
+    //  이벤트(휠 줌, 드래그 팬, 터치 핀치)
+    // ─────────────────────────────────────────────
+    viewport.addEventListener("wheel", (e) => {
+      if (!stageImg.src) return;
+      if (!e.ctrlKey) {  // 일반 휠로 줌 (브라우저 고유 확대 방지)
+        e.preventDefault();
+        zoomBy(e.deltaY, e.clientX, e.clientY);
+        persistView();
+      }
+    }, { passive:false });
+
+    let dragging = false;
+    let startX = 0, startY = 0, baseTx = 0, baseTy = 0;
+    viewport.addEventListener("pointerdown", (e) => {
+      if (!stageImg.src) return;
+      dragging = true; canvas.style.cursor = "grabbing";
+      startX = e.clientX; startY = e.clientY; baseTx = tx; baseTy = ty;
+      viewport.setPointerCapture(e.pointerId);
+    });
+    viewport.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      tx = baseTx + (e.clientX - startX);
+      ty = baseTy + (e.clientY - startY);
+      applyTransform();
+    });
+    viewport.addEventListener("pointerup", (e) => {
+      if (!dragging) return;
+      dragging = false; canvas.style.cursor = "grab";
+      persistView();
+    });
+
+    // 터치 2점 핀치
+    let pinch = null;
+    viewport.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 2) {
+        const [a, b] = e.touches;
+        const cx = (a.clientX + b.clientX)/2;
+        const cy = (a.clientY + b.clientY)/2;
+        pinch = {
+          dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+          s0: s, cx, cy
+        };
+      }
+    }, { passive:true });
+
+    viewport.addEventListener("touchmove", (e) => {
+      if (pinch && e.touches.length === 2) {
+        e.preventDefault();
+        const [a, b] = e.touches;
+        const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        const factor = dist / Math.max(1, pinch.dist);
+        const prev = s;
+        s = Math.min(8, Math.max(0.2, pinch.s0 * factor));
+
+        // 줌 중심 보정
+        const vRect = viewport.getBoundingClientRect();
+        const dx = pinch.cx - (vRect.left + vRect.width/2);
+        const dy = pinch.cy - (vRect.top  + vRect.height/2);
+        tx = tx - dx * (s - prev) / s;
+        ty = ty - dy * (s - prev) / s;
+        applyTransform();
+      }
+    }, { passive:false });
+
+    viewport.addEventListener("touchend", () => {
+      if (pinch) { persistView(); pinch = null; }
+    });
+
+    // ─────────────────────────────────────────────
+    //  보조 버튼(슬라이더 없이)
+    // ─────────────────────────────────────────────
+    const tools = document.createElement("div");
+    tools.className = "im-tools";
+    tools.style.cssText = "display:flex; gap:.5rem; margin-top:.75rem;";
+
+    function makeBtn(text, title, onClick) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = text;
+      b.title = title;
+      b.style.cssText = "padding:.4rem .6rem; border-radius:.5rem; border:1px solid var(--line, #333); background:#1c1c1c; color:#eee;";
+      b.addEventListener("click", onClick);
+      return b;
+    }
+    const btnZoomIn  = makeBtn("+", "줌인",  () => { zoomBy(-1, viewport.getBoundingClientRect().left + viewport.clientWidth/2, viewport.getBoundingClientRect().top + viewport.clientHeight/2); persistView(); });
+    const btnZoomOut = makeBtn("–", "줌아웃", () => { zoomBy(+1, viewport.getBoundingClientRect().left + viewport.clientWidth/2, viewport.getBoundingClientRect().top + viewport.clientHeight/2); persistView(); });
+    const btnFit     = makeBtn("맞춤", "전체 보이기", () => { fitToViewport(); persistView(); });
+    const btn100     = makeBtn("1:1", "원본 배율", () => { reset100(); persistView(); });
+
+    tools.append(btnZoomIn, btnZoomOut, btnFit, btn100);
+    right.append(tools);
+
+    // 이미지가 로드되면 맞춤/복원
+    stageImg.addEventListener("load", () => {
+      // 새 이미지 로드시 우선 '맞춤', 기존 저장값이 있으면 그걸 적용
+      fitToViewport();
+      restoreView();
+    });
+
+    // 파일 선택 로직 기존 그대로 사용: stageImg.src = ...
+    // (파일 드롭/선택 후 stageImg.src를 설정하는 기존 코드에 영향 없음)
+
+
     // 글로벌 닫기
     const globalClose = document.createElement("button");
     globalClose.className = "im-head-close";
