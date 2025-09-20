@@ -1041,18 +1041,40 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
         const k = e.key.toLowerCase();
         if (k === "e") setMode("eraser");
         if (k === "p") setMode("pen");
-        if ((e.ctrlKey||e.metaKey) && (k==="=" || k==="+")) zoomAtCenter(DEFAULTS.keyZoomStep);
-        if ((e.ctrlKey||e.metaKey) && k==="-")              zoomAtCenter(1/DEFAULTS.keyZoomStep);
-        if ((e.ctrlKey||e.metaKey) && k==="0")              resetZoom();
+        if ((e.ctrlKey||e.metaKey) && (k==="=" || k==="+")) { e.preventDefault(); zoomStep(+1); }
+        if ((e.ctrlKey||e.metaKey) && k==="-")              { e.preventDefault(); zoomStep(-1); }
+        // 초기화: 1배율 + 중앙 고정(칸 중앙 고정)
+        if ((e.ctrlKey||e.metaKey) && k==="0") {
+          e.preventDefault();
+          const { sx, sy } = getZoomAnchorScreenPt();
+          zoomAbout(1, sx, sy);
+        }
         if (placing.active && k === "escape")               cancelPlacement();
       });
 
       // ===== wheel / pan / pinch =====
       wrap.addEventListener("wheel", (evt)=>{
         evt.preventDefault();
-        if (evt.ctrlKey || evt.metaKey || evt.deltaZ){ const dy = wheelDeltaPx(evt); const scale = Math.exp(-dy * DEFAULTS.wheelZoomCoeff); zoomAtPoint(scale, evt.clientX, evt.clientY, wrap); return; }
-        const dx = evt.shiftKey ? evt.deltaY : evt.deltaX; const dy = evt.deltaY;
-        if (dx!==0 || dy!==0){ scrollX += dx / zoom; scrollY += dy / zoom; requestRepaint(); scheduleSaveIdle(); }
+
+        // 휠 줌
+        if (evt.ctrlKey || evt.metaKey || evt.deltaZ){
+          const dy     = (SDF?.Utils?.wheelDeltaPx ? SDF.Utils.wheelDeltaPx(evt) : evt.deltaY);
+          const factor = Math.exp(-dy * (DEFAULTS.wheelZoomCoeff || 0.004));
+          const target = zoom * factor;
+          const { sx, sy } = getZoomAnchorScreenPt();
+          zoomAbout(target, sx, sy);
+          return;
+        }
+
+        // 패닝 (기존과 동일)
+        const dx = evt.shiftKey ? evt.deltaY : evt.deltaX;
+        const dy = evt.deltaY;
+        if (dx!==0 || dy!==0){
+          scrollX += dx / zoom;
+          scrollY += dy / zoom;
+          requestRepaint();
+          scheduleSaveIdle();
+        }
       }, {passive:false});
 
       // ===== UI bindings =====
@@ -1141,6 +1163,57 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       const worldToLocal = (wx,wy) => ({ x: (wx - scrollX) * zoom, y: (wy - scrollY) * zoom });
       const worldToOff   = (wx,wy) => ({ x: wx + offSize.w/2, y: wy + offSize.h/2 });
 
+      // ===== [NEW] 스크린<->월드 변환(줌 기준 고정용) + 기준점 계산 + 공통 줌 적용 =====
+      function screenToWorld(sx, sy){
+        // sx, sy는 #sdf-screen 좌상단 기준 스크린 좌표(px)
+        return { x: (sx + scrollX) / zoom, y: (sy + scrollY) / zoom };
+      }
+      function worldToScreen(wx, wy){
+        return { x: wx * zoom - scrollX, y: wy * zoom - scrollY };
+      }
+
+      /** 600x600 그림칸(프리뷰) 중앙의 스크린 좌표 반환
+       * 우선순위: .fc-preview → .im-stage → #sdf-wrap → #sdf-screen
+       */
+      function getZoomAnchorScreenPt(){
+        const stageCand = document.querySelector('.fc-preview, .im-stage, #sdf-wrap') || screen;
+        const rStage    = screen.getBoundingClientRect();
+        const r         = stageCand.getBoundingClientRect();
+        const cx = r.left + r.width  / 2;
+        const cy = r.top  + r.height / 2;
+        // #sdf-screen 기준 로컬 스크린 좌표
+        return { sx: cx - rStage.left, sy: cy - rStage.top };
+      }
+
+      /** 지정한 스크린 지점(anchor)을 고정한 채로 줌값을 바꾸고 scroll 보정 */
+      function zoomAbout(targetZoom, anchorSx, anchorSy){
+        const minZ = DEFAULTS.minZoom, maxZ = DEFAULTS.maxZoom;
+        const newZ = clamp(targetZoom, minZ, maxZ);
+
+        // 앵커가 가리키던 월드 포인트를 기록
+        const before = screenToWorld(anchorSx, anchorSy);
+
+        // 줌 반영
+        zoom = newZ;
+
+        // 같은 월드 포인트가 같은 스크린 좌표에 남도록 scroll 보정
+        scrollX = before.x * zoom - anchorSx;
+        scrollY = before.y * zoom - anchorSy;
+
+        // 저장/리페인트
+        scheduleSaveIdle(160);
+        requestRepaint();
+      }
+
+      /** 키보드용 한 단계 줌 (dir: +1 확대, -1 축소) */
+      function zoomStep(dir){
+        const step = DEFAULTS.keyZoomStep || 1.5;
+        const mul  = (dir > 0) ? step : (1 / step);
+        const target = zoom * mul;
+        const { sx, sy } = getZoomAnchorScreenPt();
+        zoomAbout(target, sx, sy);
+      }
+
       function ensureCapacityForWorld(wx, wy){
         const { w, h } = offSize; const { x:ox, y:oy } = worldToOff(wx, wy);
         const needW = ox < DEFAULTS.growMargin || ox > w - DEFAULTS.growMargin;
@@ -1183,7 +1256,20 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
       function onPointerMoveCanvas(e){
         if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { id:e.pointerId, x:e.clientX, y:e.clientY, type:e.pointerType });
         if (placing.active){ e.preventDefault(); const rect = screen.getBoundingClientRect(); const local = { x:e.clientX - rect.left, y:e.clientY - rect.top }; const world = localToWorld(local.x, local.y); placing.wx = world.x - placing.w/2; placing.wy = world.y - placing.h/2; requestRepaint(); return; }
-        if (nav.active && pointers.size >= 2){ e.preventDefault(); const rect = wrap.getBoundingClientRect(); const center = getPointersCenter(); const dist = Math.max(1, getPointersDistance()); const startZoom = nav.startZoom; const startDist = nav.startDist; const anchor = nav.anchorWorld; const scale = dist / startDist; const nextZoom = clamp(startZoom * scale, DEFAULTS.minZoom, DEFAULTS.maxZoom); const px = center.x - rect.left; const py = center.y - rect.top; scrollX = anchor.x - px / nextZoom; scrollY = anchor.y - py / nextZoom; zoom = nextZoom; requestRepaint(); requestUpdateCursor(); scheduleSaveIdle(); return; }
+        if (nav.active && pointers.size >= 2){
+          e.preventDefault();
+          const dist      = Math.max(1, getPointersDistance());
+          const startZoom = nav.startZoom;
+          const startDist = nav.startDist;
+          const scale     = dist / startDist;
+          const nextZoom  = clamp(startZoom * scale, DEFAULTS.minZoom, DEFAULTS.maxZoom);
+
+          // 핀치도 항상 "그림 칸 중앙"을 고정 기준으로
+          const { sx, sy } = getZoomAnchorScreenPt();
+          zoomAbout(nextZoom, sx, sy);
+          requestUpdateCursor();
+          return;
+        }
         if (isDrawing){ e.preventDefault(); const rect = screen.getBoundingClientRect(); const local = { x:e.clientX - rect.left, y:e.clientY - rect.top }; const world = localToWorld(local.x, local.y); strokeTo(world.x, world.y); }
       }
       function onPointerUpCanvas(e){ e.preventDefault(); pointers.delete(e.pointerId); if (nav.active){ if (pointers.size < 2){ Object.assign(nav, { active:false, startDist:null, anchorWorld:null });scheduleSave(); } return; } endStroke(); }
