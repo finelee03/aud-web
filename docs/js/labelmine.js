@@ -626,8 +626,25 @@ ensureReady(() => whenStoreReady(async () => {
       return n;
     }
 
-    return { clamp, wheelDeltaPx, hexToRgb, rgbToHex, hsvToRgb, rgbToHsv, dataURLtoBlob, blobToImage, makeThumbnail, el, trimAndPadToSquare, canvasToBlob };
+    return { clamp, wheelDeltaPx, hexToRgb, rgbToHex, hsvToRgb, rgbToHsv, dataURLtoBlob, blobToImage, makeThumbnail, el, trimAndPadToSquare, canvasToBlob, letterboxToSquare };
   })();
+
+  // 교체: 캔버스 내용을 그대로 보존해 정사각형으로 맞추기(레터박스)
+  function letterboxToSquare(srcCanvas, { size = 1024, bg = null } = {}) {
+    const w = srcCanvas.width, h = srcCanvas.height;
+    const out = document.createElement('canvas');
+    out.width = size; out.height = size;
+    const ctx = out.getContext('2d', { alpha: true });
+    if (bg) { ctx.fillStyle = bg; ctx.fillRect(0,0,size,size); }
+
+    const s = Math.min(size / w, size / h);       // 내용 전체 보존
+    const dw = Math.round(w * s), dh = Math.round(h * s);
+    const dx = Math.round((size - dw) / 2), dy = Math.round((size - dh) / 2);
+
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(srcCanvas, 0, 0, w, h, dx, dy, dw, dh);
+    return out;
+  }
 
   function trimAndPadToSquare(srcCanvas, { padding = 0, size = 1024, bg = null } = {}) {
   const w = srcCanvas.width, h = srcCanvas.height;
@@ -756,11 +773,11 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
     async function addToGalleryFromCanvas(canvas, label){
       const id = `g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
 
-      // 🔴 정규화: 트림+패딩+정사각(1024)
-      const norm = SDF.Utils.trimAndPadToSquare(canvas, { padding: 0, size: 1024 });
+      // ✅ 트림 금지. 구도 그대로 정사각화(레터박스)
+      const norm = letterboxToSquare(canvas, { size: 1024, bg: null });
 
-      const dataURL = norm.toDataURL("image/png"); // alpha 유지
-      const thumbDataURL = await makeThumbnail(dataURL, 320, 240);
+      const dataURL = norm.toDataURL("image/png");
+      const thumbDataURL = await SDF.Utils.makeThumbnail(dataURL, 320, 240);
 
       const arr = _load(label);
       arr.unshift({ id, dataURL, thumbDataURL, createdAt: new Date().toISOString() });
@@ -1897,7 +1914,7 @@ function goMineAfterShare(label = getLabel()) {
 
       // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
       const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
-      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0, size: target });
+      const norm = SDF.Utils.letterboxToSquare(c, { size: target, bg: null });
 
       // 캔버스 → Blob
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
