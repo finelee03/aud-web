@@ -865,6 +865,15 @@
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
   }[m]));
 
+  function styleFromView(item){
+    const mode = (item.view_mode || item?.view?.mode || "").toLowerCase();
+    const fit  = (mode === "contain") ? "contain" : "cover";
+    const z  = Math.max(0.2, Math.min(8, Number(item.view_zoom ?? item?.view?.zoom ?? 1)));
+    const vx = Math.max(-100, Math.min(100, Number(item.view_x ?? item?.view?.x ?? 0)));
+    const vy = Math.max(-100, Math.min(100, Number(item.view_y ?? item?.view?.y ?? 0)));
+    return `object-fit:${fit};transform:translate(${vx}%, ${vy}%) scale(${z});transform-origin:center center;will-change:transform;`;
+  }
+
   // 카드 마크업(댓글 표시 제거)
   function cardHTML(item) {
     const liked = !!item.liked;
@@ -877,17 +886,14 @@
     return `
     <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
       <div class="media">
-        <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
+        <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" style="${styleFromView(item)}" />
         <div class="hover-ui" role="group" aria-label="Post actions">
           <div class="actions">
             <div class="stat" data-like-readonly>
               <span class="ico ico-heart" aria-hidden="true"></span>
               <span class="count" data-like-count data-count="${likes}">${fmtCount(likes)}</span>
             </div>
-
-            <!-- [ADD] 내 게시물에만 노출되는 삭제 버튼 -->
-            <button class="btn-del-thumb" type="button" aria-label="Delete"
-                    ${mine ? '' : 'hidden'} data-del="${item.id}">
+            <button class="btn-del-thumb" type="button" aria-label="Delete" ${mine ? '' : 'hidden'} data-del="${item.id}">
             </button>
           </div>
         </div>
@@ -2475,7 +2481,7 @@
         <div class="pm-layout">
           <div class="pm-left">
             <div class="media">
-              <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" />
+              <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" style="${styleFromView(item)}" />
             </div>
           </div>
 
