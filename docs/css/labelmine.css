@@ -1523,18 +1523,3 @@ position:relative;z-index:1000;}
   .crop-zoom input[type="range"]{ width:160px; }
 }
 
-/* === Crop: zoom UI는 레이아웃에 영향 주지 않게 절대배치 === */
-.cm-stage .crop-zoom{
-  position: absolute;
-  left: 60px;
-  bottom: 6px;
-  z-index: 6;
-  display: block;      /* 보이기/숨김은 visibility로만 */
-  visibility: hidden;  /* Zoom 버튼으로 토글 */
-}
-
-/* 필요 시 좌하단 툴 아이콘도 안전한 z-index로 */
-.cm-stage .crop-tools{
-  position: relative;
-  z-index: 5;
-}
