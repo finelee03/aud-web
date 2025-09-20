@@ -2737,6 +2737,14 @@ function goMineAfterShare(label = getLabel()) {
         canvas.addEventListener("lostpointercapture", up);
 
         // ---- Zoom UI (button + slider) ----
+        zoomBtn.addEventListener("click", (e)=>{
+          e.stopPropagation();
+          // Toggle slider; absolute UI so it never changes stage/canvas size
+          zoomWrap.style.display = "block";
+          zoomWrap.style.visibility =
+            zoomWrap.style.visibility === "hidden" ? "visible" : "hidden";
+          requestAnimationFrame(draw);
+        });
         zoomInput.addEventListener("input", () => {
           const target = Math.max(minCover, Math.min(4, parseFloat(zoomInput.value) || 1));
           setZoomAroundCenter(target);
@@ -2744,11 +2752,20 @@ function goMineAfterShare(label = getLabel()) {
           requestAnimationFrame(draw);
         });
 
+        // ---- Aspect ratio UI ----
+        ratioBtn.addEventListener("click",(e)=>{
+          e.stopPropagation();
+          ratioMenu.style.display = ratioMenu.style.display === "block" ? "none" : "block";
+          requestAnimationFrame(draw);
+        });
         ratioMenu.querySelectorAll("button").forEach(b=>{
           b.addEventListener("click",()=>{
             applyAspect(b.dataset.ar);
             ratioMenu.style.display = "none";
           });
+        });
+        back.addEventListener("click", (e)=>{
+          if (!tools.contains(e.target)) { ratioMenu.style.display = "none"; zoomWrap.style.display = "none"; }
         });
 
         // Keep canvas size in sync
@@ -2781,54 +2798,6 @@ function goMineAfterShare(label = getLabel()) {
 
         globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
       }
-
-      // ---- 패널 토글 유틸 ----
-      function closeAllPanels() {
-        ratioMenu.classList.remove("is-open");
-        zoomWrap.classList.remove("is-open");
-        ratioBtn.setAttribute("aria-expanded", "false");
-        zoomBtn.setAttribute("aria-expanded", "false");
-      }
-      function togglePanel(panelEl, btnEl) {
-        const willOpen = !panelEl.classList.contains("is-open");
-        closeAllPanels();
-        if (willOpen) {
-          panelEl.classList.add("is-open");
-          btnEl.setAttribute("aria-expanded", "true");
-        }
-      }
-
-      // ---- 버튼 클릭 → 토글 ----
-      ratioBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        togglePanel(ratioMenu, ratioBtn);
-      });
-      zoomBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        togglePanel(zoomWrap, zoomBtn);
-      });
-
-      // ---- 비율 항목 클릭 시 적용 후 닫기 ----
-      // (각 항목 버튼에 data-ar="1:1" 같은 값이 있다고 가정)
-      ratioMenu.addEventListener("click", (e) => {
-        const b = e.target.closest('button[data-ar]');
-        if (!b) return;
-        applyAspect(b.dataset.ar);   // ← 기존 비율 적용 함수 호출 부분
-        closeAllPanels();
-      });
-
-      // ---- 바깥 클릭/ESC로 닫기 ----
-      function onDocClick(e){
-        if (!tools.contains(e.target)) closeAllPanels();
-      }
-      document.addEventListener("click", onDocClick, { capture:true });
-
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closeAllPanels();
-      });
-
-      const onEscPanels = (e) => { if (e.key === "Escape") closeAllPanels(); };
-      document.addEventListener("keydown", onEscPanels);
 
       // 존재하는 state 대신 모듈 변수(zoom, tx, ty) 사용
       function setZoomAroundCenter(nextScale) {
@@ -2881,10 +2850,6 @@ function goMineAfterShare(label = getLabel()) {
 
       function cleanup(){
         try { URL.revokeObjectURL(url); } catch {}
-        // ⬇️ 패널 관련 전역 리스너 정리 추가
-        document.removeEventListener("click", onDocClick, { capture:true });
-        document.removeEventListener("keydown", onEscPanels);
-
         window.removeEventListener("keydown", onEsc);
         back.remove();
         document.body.classList.remove("is-cropping");
