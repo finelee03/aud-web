@@ -2751,7 +2751,6 @@ function goMineAfterShare(label = getLabel()) {
           });
         });
 
-
         // Keep canvas size in sync
         const ro = new ResizeObserver(()=>{
           const rect = stage.getBoundingClientRect();
