@@ -6,6 +6,10 @@
    * 0) KEYS / EVENTS / SHORTCUTS
    * ========================================================= */
 
+  const safeHref = (p) => (typeof window.pageHref === 'function' ? window.pageHref(p) : `./${p}`);
+
+  const escAttr = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+
   // --- CSS.escape shim (older WebViews/Safari) ---
   try {
     window.CSS = window.CSS || {};
@@ -126,7 +130,7 @@
             try {
               const ret = encodeURIComponent(location.href);
               window.auth?.markNavigate?.();
-              location.replace(`${pageHref('login.html')}?next=${ret}`);
+              location.replace(`${safeHref('login.html')}?next=${ret}`);
             } catch {}
           }
         }
@@ -901,7 +905,7 @@
     const mine = isMine(item);
 
     return `
-    <article class="feed-card" data-id="${item.id}" data-ns="${nsOf(item)}" data-owner="${mine ? 'me' : 'other'}">
+    <article class="feed-card" data-id="${escAttr(item.id)}" data-ns="${escAttr(nsOf(item))}" data-owner="${mine ? 'me' : 'other'}">
       <div class="media">
         <img src="${blobURL(item)}" alt="${safeLabel || 'item'}" loading="lazy" />
         <div class="hover-ui" role="group" aria-label="Post actions">
@@ -1075,7 +1079,12 @@
       try {
         const viewerNS = (window.getNS ? getNS() : "default");
         const rec = (typeof window.getLikeIntent === "function") ? window.getLikeIntent(id) : null;
-        if (rec) commit(id, rec.liked, (typeof rec.likes === "number" ? rec.likes : it.likes));
+      if (rec) {
+        const likes = (typeof rec.likes === "number" ? rec.likes : it.likes);
+        try { updateLikeUIEverywhere(id, rec.liked, likes); } catch {}
+        try { setFeedMemoryLike(id, rec.liked, likes); } catch {}
+        try { window.setLikeIntent?.(id, rec.liked, likes); } catch {}
+      }
       } catch {}
 
       FEED.idxById.set(id, FEED.items.length);
@@ -2349,7 +2358,7 @@
         clearAuthedFlag(); // 서버 판단을 신뢰: stale flag 제거
         const ret = encodeURIComponent(location.href);
         try { window.auth?.markNavigate?.(); } catch {}
-        location.replace(`${pageHref('login.html')}?next=${ret}`);
+        location.replace(`${safeHref('login.html')}?next=${ret}`);
         return;
       }
 
@@ -2493,56 +2502,60 @@
     }
 
     function ensureDeleteButtonFor(item) {
-    const head = sheet?.querySelector?.('.pm-head-actions');
-    if (!head) return;
+      const head = sheet?.querySelector?.('.pm-head-actions');
+      if (!head) return;
 
-    // 이미 버튼이 있으면 정리
-    let btnDel = head.querySelector('.pm-delete');
+      // 이미 버튼이 있으면 재활용
+      let btnDel = head.querySelector('.pm-delete');
 
-    const mount = () => {
-      if (!btnDel) {
+      const mount = () => {
+        if (btnDel) return;
+
         btnDel = document.createElement('button');
         btnDel.type = 'button';
         btnDel.className = 'pm-delete';
-        btnDel.setAttribute('aria-label','삭제');
+        btnDel.setAttribute('aria-label', '삭제');
         btnDel.textContent = 'Delete';
         head.insertBefore(btnDel, btnClose || null);
 
-        // 클릭 → 확인 → 낙관적 제거 → 서버 삭제 → 브로드캐스트
-        if (!btnDel.__bound) btnDel.addEventListener('click', async () => {
+        if (!btnDel.__bound) {
           btnDel.__bound = true;
-          const id = String(item.id);
-          const ns = nsOf(item);
-          const ok = confirm('이 게시물을 삭제할까요? 이 작업은 되돌릴 수 없습니다.');
-          if (!ok) return;
+          btnDel.addEventListener('click', async () => {
+            const id = String(item.id);
+            const ns = nsOf(item);
+            const ok = confirm('이 게시물을 삭제할까요? 이 작업은 되돌릴 수 없습니다.');
+            if (!ok) return;
 
-          // 낙관적: 모달 닫고 카드 제거
-          close();
-          removeItemEverywhere(id);
+            // 낙관적: 모달 닫고 카드 제거
+            close();
+            removeItemEverywhere(id);
 
-          try {
-            await deleteItemById(id, ns);
             try {
-              __bcFeed?.postMessage({ kind: FEED_EVENT_KIND, payload: { type: "item:removed", data: { id } } });
-            } catch {}
-          } catch {
-            alert('삭제에 실패했습니다. 새로고침 후 다시 시도해 주세요.');
-          }
+              await deleteItemById(id, ns);
+              try {
+                __bcFeed?.postMessage({
+                  kind: FEED_EVENT_KIND,
+                  payload: { type: 'item:removed', data: { id } }
+                });
+              } catch {}
+            } catch {
+              alert('삭제에 실패했습니다. 새로고침 후 다시 시도해 주세요.');
+            }
+          });
+        }
+      };
+
+      // 소유자 판단 → 버튼 노출/제거
+      if (isMine(item)) {
+        mount();
+      } else {
+        // 로컬 정보가 없을 수 있으니 1회 보강 후 재평가
+        ensureAuthorInfo(item).then((it) => {
+          if (isMine(it)) mount();
+          else btnDel?.remove();
         });
       }
-    };
-
-    // 소유자 판단 → 버튼 노출/제거
-    if (isMine(item)) {
-      mount();
-    } else {
-      // 로컬 정보가 없을 수 있으니 1회 보강 후 재평가
-      ensureAuthorInfo(item).then((it) => {
-        if (isMine(it)) mount();
-        else btnDel?.remove();
-      });
     }
-  }
 
     // NEW — 모달 2열 마크업(댓글 제거, 투표 추가)
     function modalSplitHTML(item){
@@ -2569,7 +2582,7 @@
         : Avatar.fromUserObject(item?.user);
       const avatar = Avatar.resolve(avatarSrc, name);
       return `
-      <article class="feed-card pm-split" data-id="${item.id}" data-ns="${nsOf(item)}">
+      <article class="feed-card pm-split" data-id="${escAttr(item.id)}" data-ns="${escAttr(nsOf(item))}">
         <div class="pm-layout">
           <div class="pm-left">
             <div class="media">
@@ -2658,7 +2671,8 @@
       } catch {}
     }
 
-    function renderAt(idx){
+    async function renderAt(idx){
+
       const it = FEED.items[idx];
       if (!it) return;
 
@@ -2682,6 +2696,8 @@
       } catch {}
       
       currentIndex = idx;
+
+      await ensureAuthorInfo(it);
 
       content.innerHTML = `<div class="pm-card">${modalSplitHTML(it)}</div>`;
       try { renderCountFromStore(it.id, content); } catch {}
@@ -2751,7 +2767,7 @@
         await loadMore();
       }
       next = Math.max(0, Math.min(next, FEED.items.length - 1));
-      renderAt(next);
+      await renderAt(next);
     }
 
     function openById(id){
@@ -2764,11 +2780,11 @@
       }
     }
 
-    function openAt(idx){
+    async function openAt(idx){
       if (!modal) inject();
       const it = FEED.items[idx];
       if (it?.id) subscribeItems([String(it.id)]);
-      renderAt(idx);
+      await renderAt(idx);    
       prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       modal.hidden = false;
       document.documentElement.style.overflow = "hidden";
