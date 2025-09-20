@@ -1897,7 +1897,7 @@ function goMineAfterShare(label = getLabel()) {
 
       // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
       const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
-      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0, size: target });
+      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0.08, size: target });
 
       // 캔버스 → Blob
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
@@ -2577,7 +2577,7 @@ function goMineAfterShare(label = getLabel()) {
         </svg>`;
 
       const ratioMenu = document.createElement("div");
-      ratioMenu.className = "crop-pop crop-menu";
+      ratioMenu.className = "crop-menu";
       ratioMenu.innerHTML = `
         <button type="button" data-ar="1:1">1:1</button>
         <button type="button" data-ar="1:2">1:2</button>`;
@@ -2595,7 +2595,7 @@ function goMineAfterShare(label = getLabel()) {
         </svg>`;
 
       const zoomWrap = document.createElement("div");
-      zoomWrap.className = "crop-pop crop-zoom";ㄴ
+      zoomWrap.className = "crop-zoom";
       const zoomInput = document.createElement("input");
       zoomInput.type = "range";
       zoomInput.min = "0.5"; zoomInput.max = "4"; zoomInput.step = "0.01"; zoomInput.value = "1";
@@ -2740,8 +2740,9 @@ function goMineAfterShare(label = getLabel()) {
         zoomBtn.addEventListener("click", (e)=>{
           e.stopPropagation();
           // Toggle slider; absolute UI so it never changes stage/canvas size
-          zoomWrap.classList.toggle("is-open");
-          ratioMenu.classList.remove("is-open");
+          zoomWrap.style.display = "block";
+          zoomWrap.style.visibility =
+            zoomWrap.style.visibility === "hidden" ? "visible" : "hidden";
           requestAnimationFrame(draw);
         });
         zoomInput.addEventListener("input", () => {
@@ -2754,8 +2755,7 @@ function goMineAfterShare(label = getLabel()) {
         // ---- Aspect ratio UI ----
         ratioBtn.addEventListener("click",(e)=>{
           e.stopPropagation();
-          ratioMenu.classList.toggle("is-open");
-          zoomWrap.classList.remove("is-open");ㄴ
+          ratioMenu.style.display = ratioMenu.style.display === "block" ? "none" : "block";
           requestAnimationFrame(draw);
         });
         ratioMenu.querySelectorAll("button").forEach(b=>{
@@ -2765,7 +2765,7 @@ function goMineAfterShare(label = getLabel()) {
           });
         });
         back.addEventListener("click", (e)=>{
-          if (!tools.contains(e.target)) { ratioMenu.classList.remove("is-open"); zoomWrap.classList.remove("is-open"); }
+          if (!tools.contains(e.target)) { ratioMenu.style.display = "none"; zoomWrap.style.display = "none"; }
         });
 
         // Keep canvas size in sync
