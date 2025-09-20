@@ -173,10 +173,6 @@ function pageHref(rel = "") {
   return ghPrefix() + String(rel).replace(/^\//, "");
 }
 
-function getNS(){
-  try { return (localStorage.getItem("auth:userns") || "default").trim().toLowerCase(); }
-  catch { return "default"; }
-}
 
 /* ========================================================================== *
  * 1) SMALL UTILS (safe JSON, clamp, DPR, etc.)
@@ -1788,48 +1784,13 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
     fd.append("author", JSON.stringify(a));   // 혹시 author만 읽는 서버 대비
   }
 
-
-  /* ========================================================================== *
-  * FEED — Unified Post Flow (No-inline-CSS, DRY)
-  * - 공통 유틸/뷰를 한 번만 정의하고 1-STEP / 3-STEP이 함께 사용
-  * - 스타일은 전부 CSS 클래스로 (동적 위치 계산 등 불가피한 부분만 style 변수 사용)
-  * ========================================================================== */
-  // blob → 패딩 적용된 dataURL (미리보기용, 1024px 기준)
-  async function makePaddedPreviewDataURL(blob, padPct = 8, sizeHint = 1024) {
-    // 1) Blob -> Image
-    const img = await (async (b) => {
-      const fr = new FileReader();
-      const p = new Promise((res, rej) => {
-        fr.onload = () => {
-          const im = new Image();
-          im.onload = () => res(im);
-          im.onerror = rej;
-          im.src = fr.result;
-        };
-        fr.onerror = rej;
-      });
-      fr.readAsDataURL(b);
-      return p;
-    })(blob);
-
-    // 2) 임시 캔버스에 그리기
-    const c = document.createElement("canvas");
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
-    c.getContext("2d").drawImage(img, 0, 0);
-
-    // 3) 트림+패딩+정사각 → dataURL
-    const size = Math.max(512, Math.min(1536, sizeHint || Math.max(c.width, c.height)));
-    const padded = SDF.Utils.trimAndPadToSquare(c, {
-      padding: Math.max(0, Math.min(45, +padPct)) / 100,
-      size
-    });
-    return padded.toDataURL("image/png");
-  }
-
-
-  (function FeedUnified(){
-    "use strict";
+/* ========================================================================== *
+ * FEED — Unified Post Flow (No-inline-CSS, DRY)
+ * - 공통 유틸/뷰를 한 번만 정의하고 1-STEP / 3-STEP이 함께 사용
+ * - 스타일은 전부 CSS 클래스로 (동적 위치 계산 등 불가피한 부분만 style 변수 사용)
+ * ========================================================================== */
+(function FeedUnified(){
+  "use strict";
 
   // ─────────────────────────────────────────────────────────────
   // 0) Namespace & Small Utilities (공통)
@@ -1846,6 +1807,7 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
     else document.addEventListener("DOMContentLoaded", cb, { once:true });
   });
 
+  function getNS(){ return (localStorage.getItem("auth:userns") || "default").trim().toLowerCase(); }
   function getLabel(){
     try{
       if (typeof window.readSelected === "function"){
@@ -1865,7 +1827,7 @@ function goMineAfterShare(label = getLabel()) {
       window.setSelectedLabel(label);
     }
   } catch {}
-  const url = `${pageHref("/mine.html")}?label=${encodeURIComponent(label)}&posted=1`;
+  const url = `${pageHref('mine.html')}?label=${encodeURIComponent(label)}&posted=1`;
   // 뒤로가기로 작성 화면 복귀를 허용하려면 assign, 히스토리 덮으려면 replace
   location.assign(url);
 }
@@ -1917,13 +1879,11 @@ function goMineAfterShare(label = getLabel()) {
   const makeThumbMaybe = U.makeThumbnail || null;
 
   // [CHANGE] FeedUnified.uploadPost 내부, fd.append 전에 넣기
-  async function uploadPost({ blob, text, width, height, bg, pad = 0.08 }) {
+  async function uploadPost({ blob, text, width, height, bg }) {
     const label = getLabel();
     const ns    = getNS();
     const csrf  = await ensureCSRF();
     const id    = `g_${now()}`;
-
-    let safePad = Math.max(0, Math.min(0.45, Number(pad) || 0));
 
     // 🔴 업로드용 블랍을 표준화
     try {
@@ -1935,7 +1895,7 @@ function goMineAfterShare(label = getLabel()) {
 
       // 트림+패딩(+정사각). 원본이 너무 크면 1024~2048 사이에서 적당히.
       const target = Math.max(1024, Math.min(2048, Math.max(c.width, c.height)));
-      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: safePad, size: target });
+      const norm = SDF.Utils.trimAndPadToSquare(c, { padding: 0.08, size: target });
 
       // 캔버스 → Blob
       blob   = await SDF.Utils.canvasToBlob(norm, 'image/png');
@@ -1958,7 +1918,6 @@ function goMineAfterShare(label = getLabel()) {
     if (width)  fd.append("width",  String(width));
     if (height) fd.append("height", String(height));
     if (csrf)   fd.append("_csrf",  csrf);
-    fd.append("pad", String(safePad));
 
     // ✨ 추가: 캡션/배경색
     const clean = String(text || "").trim();
@@ -2316,19 +2275,7 @@ function goMineAfterShare(label = getLabel()) {
       const body  = document.createElement("div"); body.className = "im-body";
       const left  = document.createElement("div"); left.className = "im-left";
       const stage = document.createElement("div"); stage.className = "im-stage has-image";
-      const img   = document.createElement("img");
-      img.alt = "";
-
-      // [미리보기] 원본 blob 기준 패딩 적용해서 dataURL로 갱신
-      let previewTick = 0;
-      async function refreshPreviewDebounced() {
-        const my = ++previewTick;
-        try {
-          const du = await makePaddedPreviewDataURL(blob, padPct, 1024);
-          if (my !== previewTick) return; // 최신 호출만 반영
-          img.src = du;
-        } catch {}
-      }
+      const img   = document.createElement("img"); img.src = url; img.alt = "";
       stage.append(img); left.append(stage);
 
       const right = document.createElement("div"); right.className = "im-right";
@@ -2365,32 +2312,10 @@ function goMineAfterShare(label = getLabel()) {
       const picker = buildColorPicker({ onChange: (hex) => applyBg(hex) });
       applyBg('#FFFFFF');
 
-      // 패딩 슬라이더 (0~45%, 기본 8%)
-      let padPct = 8;
-      const padGroup = document.createElement("div");
-      padGroup.className = "im-group";
-      padGroup.textContent = "Padding";
-      const padRow = document.createElement("div");
-      padRow.className = "im-row-range";
-      const padInput = document.createElement("input");
-      padInput.type = "range"; padInput.min = "0"; padInput.max = "45"; padInput.step = "1"; padInput.value = String(padPct);
-      padInput.className = "im-pad";
-      const padVal = document.createElement("span");
-      padVal.className = "im-pad-val";
-      padVal.textContent = padPct + "%";
-      padInput.addEventListener("input", () => {
-        padPct = +padInput.value;
-        padVal.textContent = padPct + "%";
-        refreshPreviewDebounced();
-      });
-      padRow.append(padInput, padVal);
-      padGroup.append(padRow);
-
-      right.append(acct, caption, meta, picker.el, padGroup);
+      right.append(acct, caption, meta, picker.el);
       body.append(left, right);
       shell.append(head, body);
       back.append(shell);
-      refreshPreviewDebounced();
 
       // 전역 X
       const globalClose = document.createElement("button");
@@ -2422,7 +2347,7 @@ function goMineAfterShare(label = getLabel()) {
         share.textContent = "Sharing…";
         try {
           if (!await requireLoginOrRedirect()) return;
-          await uploadPost({ blob, text: caption.value, width: w, height: h, bg: bgHex, pad: padPct/100 });
+          await uploadPost({ blob, text: caption.value, width: w, height: h, bg: bgHex });
           // ✅ 업로드 성공 → mine으로 이동
           goMineAfterShare();
           return; // 네비게이션 트리거 이후 아래 코드는 사실상 실행되지 않음
@@ -2490,28 +2415,7 @@ function goMineAfterShare(label = getLabel()) {
     const picker  = buildColorPicker({ onChange: (hex)=> applyBg(hex) });
     applyBg('#FFFFFF');
 
-    // 패딩 슬라이더 (0~45%, 기본 8%)
-    let padPct = 8;
-    const padGroup = document.createElement("div");
-    padGroup.className = "im-group";
-    padGroup.textContent = "Padding";
-    const padRow = document.createElement("div");
-    padRow.className = "im-row-range";
-    const padInput = document.createElement("input");
-    padInput.type = "range"; padInput.min = "0"; padInput.max = "45"; padInput.step = "1"; padInput.value = String(padPct);
-    padInput.className = "im-pad";
-    const padVal = document.createElement("span");
-    padVal.className = "im-pad-val";
-    padVal.textContent = padPct + "%";
-    padInput.addEventListener("input", ()=>{
-      padPct = +padInput.value;
-      padVal.textContent = padPct + "%";
-      refreshPreviewDebounced();
-    });
-    padRow.append(padInput, padVal);
-    padGroup.append(padRow);
-
-    right.append(acct, caption, meta, attach, picker.el, padGroup);
+    right.append(acct, caption, meta, attach, picker.el);
 
     // 글로벌 닫기
     const globalClose = document.createElement("button");
@@ -2528,23 +2432,11 @@ function goMineAfterShare(label = getLabel()) {
 
     // 상태
     const state = { blob:null, w:0, h:0 };
-    let previewTick = 0;
-    async function refreshPreviewDebounced(){
-      if (!state.blob) return;
-      const my = ++previewTick;
-      try {
-        const du = await makePaddedPreviewDataURL(state.blob, padPct, 1024);
-        if (my !== previewTick) return;
-        stageImg.src = du;
-      } catch {}
-    }
 
     function applySelection(b, w, h){
       state.blob = b; state.w = w|0; state.h = h|0;
       if (b){
-      stage.classList.add("has-image");
-      // 패딩 반영된 미리보기 생성
-      refreshPreviewDebounced();
+        const url = URL.createObjectURL(b);
         stageImg.src = url;
         stage.classList.add("has-image");
         stageImg.addEventListener("load", ()=> URL.revokeObjectURL(url), { once:true });
@@ -2595,8 +2487,7 @@ function goMineAfterShare(label = getLabel()) {
           text: caption.value,
           width: state.w,
           height: state.h,
-          bg: bgHex,
-          pad: padPct/100
+          bg: bgHex
         });
         // ✅ 업로드 성공 → mine으로 이동
         goMineAfterShare();
@@ -2799,7 +2690,11 @@ function goMineAfterShare(label = getLabel()) {
   // ─────────────────────────────────────────────────────────────
   function mountPostButton(){
     const wrap = document.getElementById('sdf-wrap');
-    const drawWrap = document.querySelector('.labelmine-draw-wrap') || wrap?.parentElement || document.querySelector('main.labelmine-body') || document.body;
+    const drawWrap =
+      document.querySelector('.labelmine-draw-wrap') ||
+      wrap?.parentElement ||
+      document.querySelector('main.labelmine-body') ||
+      document.body;
     if (!wrap || !drawWrap) return;
 
     let bar = drawWrap.querySelector('.sdf-actionbar');
@@ -2815,19 +2710,25 @@ function goMineAfterShare(label = getLabel()) {
       btn.id = 'feed-open-btn';
       btn.type = 'button';
       btn.className = 'feed-open-btn';
-      btn.textContent = 'POST';
-    } else {
-      btn.classList.add('feed-open-btn');
-      btn.classList.remove('feed-open-btn--bottom');
+      btn.textContent = 'Post';
+      bar.appendChild(btn);
     }
 
-    if (!btn.dataset.bound) {
-      btn.addEventListener('click', openFeedModal);
-      btn.dataset.bound = '1';
-      btn.setAttribute('aria-label', '새 게시물 만들기');
-    }
-    if (btn.parentElement !== bar) bar.appendChild(btn);
+    // 기본(1-스텝) 동작
+    btn.addEventListener('click', (e) => {
+      // 3-스텝 후킹이 있으면 그쪽이 가로챕니다 (hookPostButtonForThreeStep에서 capture 리스너로 처리)
+      if (typeof window.openFeedModal === 'function') {
+        e.preventDefault();
+        window.openFeedModal();
+      }
+    }, { passive: false });
+
+    // 3-스텝 가로채기(갤러리에 아이템 있을 때)
+    hookPostButtonForThreeStep();
   }
+
+  // 부팅 시 장착
+  ensureReady(mountPostButton);
 
   // ─────────────────────────────────────────────────────────────
   // 7) Bootstrap
