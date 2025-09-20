@@ -2615,6 +2615,10 @@ function goMineAfterShare(label = getLabel()) {
       back.append(shell, globalClose);
       document.body.append(back);
 
+      if (window.CropUI && typeof CropUI.enhance === 'function') {
+        CropUI.enhance(shell, { debug: false });
+      }
+
       const img = new Image();
       img.src = url;
 
@@ -2690,16 +2694,16 @@ function goMineAfterShare(label = getLabel()) {
         return { w:a, h:b };
       }
 
+      let minCover = 1;
+
       function applyAspect(next){
         ar = next;
         const {fw, fh} = frameRect();
-        const zx = fw / img.naturalWidth;
-        const zy = fh / img.naturalHeight;
-        zoom = Math.max(zx, zy);               // cover frame by default
+        minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
+        zoom = Math.max(minCover, zoom);
         centerImage();
         draw();
-        // sync slider
-        zoomInput.value = String(Math.max(0.5, Math.min(4, zoom)));
+        if (zoomInput) zoomInput.value = String(Math.max(minCover, Math.min(4, zoom)));
       }
 
       function centerImage(){ tx = 0; ty = 0; }
@@ -2740,13 +2744,16 @@ function goMineAfterShare(label = getLabel()) {
         zoomBtn.addEventListener("click", (e)=>{
           e.stopPropagation();
           // Toggle slider; absolute UI so it never changes stage/canvas size
-          zoomWrap.style.display = zoomWrap.style.display === "block" ? "none" : "block";
-          // Defensive: ensure a draw after UI toggle (in case of style/layout flush)
+          zoomWrap.style.display = "block";
+          zoomWrap.style.visibility =
+            zoomWrap.style.visibility === "hidden" ? "visible" : "hidden";
           requestAnimationFrame(draw);
         });
-        zoomInput.addEventListener("input", ()=>{
-          const target = Math.max(0.5, Math.min(4, parseFloat(zoomInput.value)||1));
+        zoomInput.addEventListener("input", () => {
+          const target = Math.max(minCover, Math.min(4, parseFloat(zoomInput.value) || 1));
           setZoomAroundCenter(target);
+          // ✅ 내부 상태 갱신 뒤 반드시 다시 그리기
+          requestAnimationFrame(draw);
         });
 
         // ---- Aspect ratio UI ----
@@ -2864,6 +2871,174 @@ function goMineAfterShare(label = getLabel()) {
       window.addEventListener("keydown", onEsc);
     });
   }
+
+  /* =========================================================================
+  * CROP UI ENHANCER (zoom button/slider fixes, gesture block, minCover)
+  * ========================================================================= */
+  const CropUI = (() => {
+    // 사용처에서 draw()를 넘겨주지 않아도 안전하게 화면을 다시 그릴 수 있도록
+    // 캔버스를 리셋 → 내부 draw 핸들러가 있다면 트리거, 없으면 마지막 스냅샷 복원
+    function makePixelProbe(canvas) {
+      const ctx = canvas.getContext("2d");
+      return {
+        isBlank(sample = 40) {
+          try {
+            const w = canvas.width, h = canvas.height;
+            if (!w || !h) return { blank: true, why: "size=0" };
+            const d = ctx.getImageData((w>>1), (h>>1), 1, 1, { willReadFrequently: true }).data;
+            if (d[3] !== 0) return { blank: false };
+            for (let i=0;i<sample;i++){
+              const x = (Math.random() * w) | 0, y = (Math.random() * h) | 0;
+              if (ctx.getImageData(x, y, 1, 1, { willReadFrequently: true }).data[3] !== 0) return { blank:false };
+            }
+            return { blank:true, why:"all alpha=0" };
+          } catch(e){ return { blank:false, err:String(e) }; }
+        },
+        snap(){ try { return canvas.toDataURL("image/png"); } catch { return null; } },
+        async restore(dataURL){
+          if (!dataURL) return false;
+          return await new Promise(res=>{
+            const img=new Image();
+            img.onload=()=>{ try {
+              if (canvas.width===0||canvas.height===0) {
+                const r = canvas.getBoundingClientRect();
+                canvas.width = Math.max(1, Math.floor(r.width));
+                canvas.height = Math.max(1, Math.floor(r.height));
+              }
+              ctx.clearRect(0,0,canvas.width,canvas.height);
+              ctx.drawImage(img,0,0,canvas.width,canvas.height);
+              res(true);
+            } catch { res(false); } };
+            img.src=dataURL;
+          });
+        }
+      };
+    }
+
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+    function enhance(modal, { debug=false } = {}) {
+      if (!modal) return;
+      const stage  = modal.querySelector(".cm-stage");
+      const canvas = stage?.querySelector("canvas");
+      const tools  = modal.querySelector(".crop-tools") || stage?.querySelector(".crop-tools");
+      if (!stage || !canvas || !tools) return;
+
+      const probe = makePixelProbe(canvas);
+
+      // -- 제스처/휠 줌 차단 (슬라이더 영역 제외), 패닝 그대로
+      const isInSlider = (t) => !!(t && t.closest && t.closest(".crop-zoom"));
+      const stopZoomGest = e => { if (isInSlider(e.target)) return; e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
+      ["wheel","gesturestart","gesturechange","gestureend","touchmove"].forEach(t=>{
+        stage.addEventListener(t, stopZoomGest, { passive:false, capture:true });
+      });
+
+      // -- UI 요소
+      const btns     = tools.querySelectorAll(".crop-btn");
+      const zoomBtn  = btns[1] || tools.querySelector('.crop-btn[aria-label="Zoom"]');
+      const zoomWrap = tools.querySelector(".crop-zoom");
+      const zoomInput= zoomWrap?.querySelector('input[type="range"]');
+
+      // -- 비율 버튼(1:1, 1:2) 처리용 최소 배율 계산
+      let minCover = 1;
+      function recalcMinCover() {
+        const fr = stage.getBoundingClientRect();
+        // 이미지 원본 크기가 접근 가능하다면 여기에 맞춰 계산하면 좋지만
+        // 안전하게 "뷰를 빈틈없이 덮는 배율"을 하한으로 둔다.
+        // (앱 내부 zoom이 1 기준이라면 필요시 스케일 보정)
+        const naturalW = canvas.width || Math.max(1, Math.floor(fr.width));
+        const naturalH = canvas.height|| Math.max(1, Math.floor(fr.height));
+        // 프레임 기준 최소 덮개 배율
+        minCover = Math.max(fr.width / naturalW, fr.height / naturalH);
+      }
+      recalcMinCover();
+
+      // -- 줌 버튼: display 토글 금지, visibility만 토글 + 즉시 리드로우
+      if (zoomWrap){
+        Object.assign(zoomWrap.style, {
+          position: "absolute", left: "60px", bottom: "6px",
+          zIndex: "6", display: "block", visibility: "hidden"
+        });
+      }
+      if (zoomBtn && zoomWrap){
+        const stop = (e)=>{ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
+        zoomBtn.addEventListener("pointerdown", stop, { capture:true });
+        zoomBtn.addEventListener("click",       stop, { capture:true });
+        zoomBtn.addEventListener("click", ()=> {
+          zoomWrap.style.visibility = (zoomWrap.style.visibility === "hidden" ? "visible" : "hidden");
+          requestAnimationFrame(()=>{ try { canvas.width = canvas.width; } catch {} });
+        });
+      }
+
+      // -- 슬라이더: 값 반영 후 반드시 draw 보장 (앱 draw가 없으면 리스토어)
+      if (zoomInput){
+        let prevVal = zoomInput.value, guard=false;
+        zoomInput.addEventListener("pointerdown", ()=>{ prevVal = zoomInput.value; }, { capture:true });
+
+        zoomInput.addEventListener("input", async () => {
+          if (guard) return; guard = true;
+
+          // (1) 이전 프레임 스냅샷
+          const snap = probe.snap();
+
+          // (2) 내부 핸들러가 먼저 돌도록 다음 틱에서 검사
+          setTimeout(async ()=>{
+            // 최소 배율 하한 적용(내부 로직이 zoom을 직접 쓰더라도 슬라이더 값 자체를 가드)
+            const v = parseFloat(zoomInput.value);
+            if (!isNaN(v)) {
+              const safe = clamp(v, minCover, 4);
+              if (safe !== v) zoomInput.value = String(safe);
+            }
+
+            // (3) 캔버스가 비었거나 가려졌으면 즉시 복구 + 값 롤백
+            const b = probe.isBlank();
+            const cs = getComputedStyle(canvas);
+            const invis = (cs.display === "none" || cs.visibility === "hidden" || +cs.opacity === 0);
+
+            if (b.blank || invis) {
+              if (debug) console.warn("[CROP] slider → disappeared, rollback", { blank:b, invis, prev:prevVal, now:zoomInput.value });
+              await probe.restore(snap);
+              zoomInput.value = prevVal;
+              // 내부 로직 재실행(앱이 이 이벤트를 듣고 draw 한다면 이걸로 커버)
+              zoomInput.dispatchEvent(new Event("input", { bubbles:true }));
+              requestAnimationFrame(()=>{ try { canvas.width = canvas.width; } catch {} });
+            } else {
+              prevVal = zoomInput.value;
+              // 내부 draw가 없다면 마지막으로 한 번 더 리드로우 유도
+              requestAnimationFrame(()=>{ try { canvas.width = canvas.width; } catch {} });
+            }
+            guard = false;
+          }, 0);
+        }, { capture:false });
+      }
+
+      // -- 디버그 트레이서(옵션)
+      if (debug) {
+        const sctx = canvas.getContext("2d");
+        const stat = { clears:0, draws:0, lastDI:null };
+        const _clear = sctx.clearRect.bind(sctx);
+        const _draw  = sctx.drawImage.bind(sctx);
+        sctx.clearRect = (...a)=>{ stat.clears++; return _clear(...a); };
+        sctx.drawImage = (...a)=>{ let dx,dy,dw,dh; if(a.length===3){[dx,dy]=a;dw=a[0]?.width||0;dh=a[0]?.height||0;} else if(a.length===5){[, ,dx,dy,dw,dh]=a;} else if(a.length===9){[, , , , , ,dx,dy,dw,dh]=a;} stat.draws++; stat.lastDI={dx,dy,dw,dh,t:performance.now()}; return _draw(...a); };
+        window.__cropDebug = {
+          info(){
+            const cs = getComputedStyle(canvas);
+            return {
+              canvas:{w:canvas.width, h:canvas.height, disp:cs.display, vis:cs.visibility, op:cs.opacity},
+              blank: probe.isBlank(), stat
+            };
+          }
+        };
+        console.log("[CROP] debug trace armed → __cropDebug.info()");
+      }
+
+      // 반응형에서 프레임 바뀌면 하한 재계산
+      new ResizeObserver(()=>{ recalcMinCover(); }).observe(stage);
+    }
+
+    return { enhance };
+  })();
+
 
   // 🔁 3-스텝 흐름: Gallery → Crop → Compose (← 뒤로가면 한 스텝씩 복귀)
   async function runThreeStepFlow(){
