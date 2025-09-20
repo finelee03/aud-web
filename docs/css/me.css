@@ -544,7 +544,7 @@ progress#m-rate-bar::-webkit-progress-value{
 .mine-footer .footer-inner{
   max-width: var(--container-max, 1500px);
   padding: 0 var(--container-pad, 24px);
-  margin: 0 auto; display: flex; justify-content: center;
+  margin: 0 auto; display: flex; justify-content: center;   gap: 12px;    
 }
 .mine-footer .footer-inner .btn-logout + .btn-logout { margin-left: 8px; }
 
