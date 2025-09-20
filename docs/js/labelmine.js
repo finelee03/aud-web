@@ -322,6 +322,8 @@ function renderTimestamp(){
     root.textContent = "";
     root.dataset.state = "empty";
     return;
+  } else {
+    delete root.dataset.state;
   }
 
   if (isValidYMD(dataDate) && getTs(effectiveLabel) !== dataDate) {
@@ -1026,7 +1028,7 @@ function canvasToBlob(canvas, type = 'image/png', quality) {
         if (!placing.active || !placing.img) return;
         ensureCapacityForWorldRect(placing.wx, placing.wy, placing.w, placing.h);
         const octx = offscreen.getContext("2d"); octx.setTransform(OFF_DPR, 0, 0, OFF_DPR, 0, 0);
-        const off = worldToOff(placing.wx, placing.wy); octx.drawImage(placing.img, off.x, off.y);
+        const off = worldToOff(placing.wx, placing.wy); octx.drawImage(placing.img, off.x, off.y, placing.w, placing.h);
         placing.active = false; placing.img = null; repaint(); scheduleSave();
       }
 
