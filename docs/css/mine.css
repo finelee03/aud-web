@@ -715,6 +715,10 @@ img.avatar.avatar--lg{ width: var(--avatar-lg); height: var(--avatar-lg); }
   min-width:max(44px, var(--pm-heart-size, 28px));
   min-height:max(44px, var(--pm-heart-size, 28px));
   padding:0;
+  display:flex;                 /* ← 콘텐츠 박스를 flex로 */
+  align-items:center;           /* 수직 가운데 */
+  justify-content:flex-start;   /* 수평 왼쪽 정렬 */
+  text-align:left;              /* 일부 UA 기본값 보정 */
 }
 
 /* 조상에서 필터/블렌드로 죽는 이슈 무력화 */
