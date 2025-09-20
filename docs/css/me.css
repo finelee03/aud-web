@@ -207,27 +207,37 @@ header.nav{
 .btn-logout[aria-busy="true"]{ background: var(--accent); color:#111; opacity: .95; pointer-events: none; }
 
 /* --- Delete: 원형 버튼 + 마스크 아이콘 --- */
+/* --- Delete: 완전 원형 버튼 --- */
 .btn-delete{
-  inline-size: 44px;
-  block-size: 44px;
-  padding: 0;
+  /* 원형 고정 */
+  inline-size: 48px;         /* 지름 */
+  block-size: 48px;
+  aspect-ratio: 1 / 1;       /* 혹시라도 가로세로 비틀림 방지 */
   border-radius: 50%;
+  padding: 0;
+
+  /* 레이아웃 */
   display: inline-grid;
   place-items: center;
+
+  /* 룩앤필 */
   background: #e9e9ec;
-  color: #111; /* 아이콘 색은 currentColor로 따라감 */
+  color: #111;               /* 아이콘 색 (currentColor) */
   border: 1px solid rgba(0,0,0,.14);
   box-shadow: 0 1px 2px rgba(0,0,0,.06);
   cursor: pointer;
   transition: background .18s ease, transform .06s ease, opacity .18s ease, color .18s ease;
 }
+
+/* 아이콘(마스크) */
 .btn-delete::before{
-  content:"";
+  content: "";
   inline-size: 22px; block-size: 22px;
   background-color: currentColor;
   -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><path d='M18 8L22 12M22 12L18 16M22 12H9M15 4.20404C13.7252 3.43827 12.2452 3 10.6667 3C5.8802 3 2 7.02944 2 12C2 16.9706 5.8802 21 10.6667 21C12.2452 21 13.7252 20.5617 15 19.796' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
           mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><path d='M18 8L22 12M22 12L18 16M22 12H9M15 4.20404C13.7252 3.43827 12.2452 3 10.6667 3C5.8802 3 2 7.02944 2 12C2 16.9706 5.8802 21 10.6667 21C12.2452 21 13.7252 20.5617 15 19.796' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
 }
+
 .btn-delete:hover{ background:#dedee2; }
 .btn-delete:active{ background: var(--accent); transform: translateY(1px); }
 .btn-delete[aria-busy="true"]{ opacity:.6; pointer-events:none; }
