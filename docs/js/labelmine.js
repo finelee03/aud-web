@@ -2601,12 +2601,6 @@ function goMineAfterShare(label = getLabel()) {
         ctx.drawImage(srcImg, -srcImg.naturalWidth/2, -srcImg.naturalHeight/2);
         ctx.restore();
 
-        // overlay guide (safe minimal)
-        ctx.save();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-        ctx.strokeRect(1,1,canvas.width-2,canvas.height-2);
-        ctx.restore();
       }
 
       // Drag to pan
