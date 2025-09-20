@@ -2513,11 +2513,10 @@ function goMineAfterShare(label = getLabel()) {
     window.openFeedModal = openFeedModal;
   }
 
-// labelmine.js — openCropModal (button/slider zoom enabled, gestures disabled)
+// labelmine.js — openCropModal (cursor-centered zoom, clamp pan, export on Next)
 function openCropModal({ blob, w, h }) {
   return new Promise((resolve, reject) => {
     document.body.classList.add("is-cropping");
-
     const url = URL.createObjectURL(blob);
 
     // Backdrop & shell
@@ -2550,12 +2549,16 @@ function openCropModal({ blob, w, h }) {
     // Body / Stage
     const body  = document.createElement("div");
     body.className = "cm-body";
+
+    // ⬇️ 그림 컨테이너 — 질문했던 부분: 이 엘리먼트의 클래스가 바로 "cm-stage"
     const stage = document.createElement("div");
     stage.className = "cm-stage";
 
     // Canvas
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { alpha: true });
+
+    // Overlay(그리드/마스크)
     const overlay = document.createElement("div");
     overlay.className = "crop-overlay";
     stage.append(canvas, overlay);
@@ -2565,7 +2568,7 @@ function openCropModal({ blob, w, h }) {
     const tools = document.createElement("div");
     tools.className = "crop-tools";
 
-    // Aspect Ratio
+    // Aspect Ratio 버튼 + 메뉴
     const ratioBtn = document.createElement("button");
     ratioBtn.type = "button";
     ratioBtn.className = "crop-btn";
@@ -2581,9 +2584,12 @@ function openCropModal({ blob, w, h }) {
     ratioMenu.className = "crop-pop crop-menu";
     ratioMenu.innerHTML = `
       <button type="button" data-ar="1:1">1:1</button>
-      <button type="button" data-ar="1:2">1:2</button>`;
+      <button type="button" data-ar="4:3">4:3</button>
+      <button type="button" data-ar="3:4">3:4</button>
+      <button type="button" data-ar="16:9">16:9</button>
+      <button type="button" data-ar="9:16">9:16</button>`;
 
-    // Zoom
+    // Zoom 버튼 + 슬라이더
     const zoomBtn = document.createElement("button");
     zoomBtn.type = "button";
     zoomBtn.className = "crop-btn";
@@ -2601,7 +2607,7 @@ function openCropModal({ blob, w, h }) {
     const zoomInput = document.createElement("input");
     zoomInput.type = "range";
     zoomInput.min = "0.5";
-    zoomInput.max = "4";
+    zoomInput.max = "8";
     zoomInput.step = "0.01";
     zoomInput.value = "1";
     zoomWrap.append(zoomInput);
@@ -2619,17 +2625,23 @@ function openCropModal({ blob, w, h }) {
     back.append(shell, globalClose);
     document.body.append(back);
 
+    // ───────────────────────────────────────────────────────────
+    // State
+    // ───────────────────────────────────────────────────────────
     const img = new Image();
     img.src = url;
 
-    // State
     let ar = "1:1";
-    let tx = 0, ty = 0;
-    let isPanning = false, panStart = {x:0, y:0}, startTX = 0, startTY = 0;
-    let viewW = 0, viewH = 0;
-    let frame = null;
+    let tx = 0, ty = 0;                 // 화면 프레임 중심을 기준으로 한 이미지 오프셋(픽셀)
+    let isPanning = false;
+    let panStart = {x:0, y:0};
+    let startTX = 0, startTY = 0;
+
+    let viewW = 0, viewH = 0;           // stage(뷰) 크기
+    let frame = null;                    // 프레임 DOM
     let zoom = 1;
-    let minCover = 1;
+    let minCover = 1;                    // 프레임을 꽉 채우는 최소 배율
+    const MAX_ZOOM = 8;
 
     // popover helpers
     function openPop(which){
@@ -2649,27 +2661,74 @@ function openCropModal({ blob, w, h }) {
       zoomBtn.classList.remove("is-active","is-muted");
     }
 
-    if ("decode" in img) {
-      img.decode().then(init).catch(() => { img.onload = init; });
-    } else {
-      img.onload = init;
+    // helpers
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+    function parseAspect(s){
+      const [a,b] = s.split(":").map(n => Math.max(1, parseInt(n,10)||1));
+      return { w:a, h:b };
     }
 
-    function init() {
+    function frameRect(){
+      const r = parseAspect(ar);
+      let fw = viewW, fh = Math.round(fw * r.h / r.w);
+      if (fh > viewH) { fh = viewH; fw = Math.round(fh * r.w / r.h); }
+      const fx = Math.round((viewW - fw) / 2);
+      const fy = Math.round((viewH - fh) / 2);
+
+      if (frame) {
+        frame.style.left = `${fx}px`;
+        frame.style.top  = `${fy}px`;
+        frame.style.width = `${fw}px`;
+        frame.style.height= `${fh}px`;
+      }
+      return { fx, fy, fw, fh };
+    }
+
+    function centerImage(){ tx = 0; ty = 0; }
+
+    function ensureCoverClamp(){
+      // 프레임 사각형을 빈틈 없이 덮도록 tx,ty를 클램프
+      const { fw, fh } = frameRect();
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const drawW = iw * zoom, drawH = ih * zoom;
+
+      // 수식: dx = fx + tx - drawW/2 + fw/2
+      // 커버 조건으로부터 tx의 허용 범위: [fw/2 - drawW/2, drawW/2 - fw/2]
+      const txMin = (fw/2) - (drawW/2);
+      const txMax = (drawW/2) - (fw/2);
+      const tyMin = (fh/2) - (drawH/2);
+      const tyMax = (drawH/2) - (fh/2);
+
+      tx = clamp(tx, txMin, txMax);
+      ty = clamp(ty, tyMin, tyMax);
+    }
+
+    function setZoomAroundCenter(nextZoom){
+      const rect = stage.getBoundingClientRect();
+      zoomAtClientPoint(nextZoom / zoom, rect.left + viewW/2, rect.top + viewH/2);
+    }
+
+    function applyAspect(next){
+      ar = next;
+      const { fw, fh } = frameRect();
+      minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
+      zoom = Math.max(zoom, minCover);
+      zoomInput.value = String(zoom);
+      ensureCoverClamp();
+      draw();
+    }
+
+    function onStageResize() {
       const rect = stage.getBoundingClientRect();
       viewW = Math.max(1, Math.floor(rect.width));
       viewH = Math.max(1, Math.floor(rect.height));
-      canvas.width = viewW;
+      canvas.width  = viewW;
       canvas.height = viewH;
 
-      frame = document.createElement("div");
-      frame.className = "crop-frame";
-      stage.appendChild(frame);
-
-      applyAspect(ar);
-      centerImage();
+      frameRect();               // 프레임 DOM 반영
+      ensureCoverClamp();
       draw();
-      bindEvents();
     }
 
     function draw() {
@@ -2691,204 +2750,212 @@ function openCropModal({ blob, w, h }) {
       ctx.restore();
     }
 
-    function frameRect(){
-      const r = parseAspect(ar);
-      let fw = viewW, fh = Math.round(fw * r.h / r.w);
-      if (fh > viewH) { fh = viewH; fw = Math.round(fh * r.w / r.h); }
-      const fx = Math.round((viewW - fw) / 2);
-      const fy = Math.round((viewH - fh) / 2);
+    // 커서 좌표 기준 줌
+    function zoomAtClientPoint(scale, clientX, clientY){
+      const next = clamp(zoom * scale, minCover, MAX_ZOOM);
+      if (next === zoom) return;
 
-      if (frame) {
-        frame.style.left = `${fx}px`;
-        frame.style.top  = `${fy}px`;
-        frame.style.width = `${fw}px`;
-        frame.style.height= `${fh}px`;
-      }
-      return { fx, fy, fw, fh };
-    }
-
-    function parseAspect(s){
-      const [a,b] = s.split(":").map(n => Math.max(1, parseInt(n,10)||1));
-      return { w:a, h:b };
-    }
-
-    function applyAspect(next){
-      ar = next;
-      const { fw, fh } = frameRect();
-      minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
-      const keep = Math.max(minCover, zoom);
-      setZoomAroundCenter(keep);
-      zoomInput.value = String(keep);
-      draw();
-    }
-
-    function centerImage(){ tx = 0; ty = 0; }
-
-    function bindEvents(){
-      // disable gesture zoom
-      const stopAll = (e)=>{ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
-      ['wheel','gesturestart','gesturechange','gestureend','touchmove'].forEach(t=>{
-        stage.addEventListener(t, stopAll, { passive:false, capture:true });
-      });
-
-      // pan
-      canvas.addEventListener("pointerdown", (e)=>{
-        isPanning = true; canvas.setPointerCapture(e.pointerId);
-        panStart = { x: e.clientX, y: e.clientY };
-        startTX = tx; startTY = ty;
-        overlay.classList.add("is-active");
-        closePops();
-      });
-      const move = (e)=>{
-        if (!isPanning) return;
-        const dx = e.clientX - panStart.x;
-        const dy = e.clientY - panStart.y;
-        tx = startTX + dx;
-        ty = startTY + dy;
-        draw();
-      };
-      const up = ()=>{
-        if (!isPanning) return;
-        isPanning = false;
-        overlay.classList.remove("is-active");
-      };
-      canvas.addEventListener("pointermove", move);
-      canvas.addEventListener("pointerup", up);
-      canvas.addEventListener("pointercancel", up);
-      canvas.addEventListener("lostpointercapture", up);
-
-      // ratio popover
-      ratioBtn.addEventListener("click", (e)=>{
-        e.stopPropagation();
-        ratioMenu.classList.contains("is-open") ? closePops() : openPop("ratio");
-      });
-      ratioMenu.querySelectorAll("button").forEach(b=>{
-        b.addEventListener("click", ()=>{
-          applyAspect(b.dataset.ar);
-          closePops();
-        });
-      });
-
-      // zoom popover + slider
-      zoomBtn.addEventListener("click", (e)=>{
-        e.stopPropagation();
-        zoomWrap.classList.contains("is-open") ? closePops() : openPop("zoom");
-      });
-      zoomInput.addEventListener("input", ()=>{
-        const next = Math.max(minCover, Math.min(4, parseFloat(zoomInput.value)||1));
-        setZoomAroundCenter(next);
-        requestAnimationFrame(draw);
-      });
-
-      // outside click closes popovers
-      back.addEventListener("click", (e)=>{
-        if (!tools.contains(e.target)) closePops();
-      });
-
-      // resize sync
-      const ro = new ResizeObserver(()=>{
-        const rect = stage.getBoundingClientRect();
-        viewW = Math.max(1, Math.floor(rect.width));
-        viewH = Math.max(1, Math.floor(rect.height));
-        canvas.width = viewW; canvas.height = viewH;
-
-        // Recompute frame & minCover, then preserve center-anchored zoom
-        const { fw, fh } = frameRect();
-        minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
-        const keep = Math.max(minCover, zoom);
-        setZoomAroundCenter(keep);
-        zoomInput.value = String(keep);
-
-        draw();
-      });
-      ro.observe(stage);
-
-      // nav
-      backBtn.addEventListener("click", async ()=>{
-        cleanup();
-        try {
-          const picked = await openGalleryPicker();
-          const again  = await openCropModal(picked);
-          resolve(again);
-        } catch { reject(new Error("cancel")); }
-      });
-
-      nextBtn.addEventListener("click", async ()=>{
-        nextBtn.disabled = true;
-        title.textContent = "New post";
-        const out = await exportCroppedCanvas();
-        cleanup();
-        resolve(out);
-      });
-
-      globalClose.addEventListener("click", ()=>{ cleanup(); reject(new Error("cancel")); });
-
-      // esc to close popovers (not modal)
-      const onEscPop = (e)=>{ if (e.key === "Escape") closePops(); };
-      window.addEventListener("keydown", onEscPop);
-      shell._cleanup = ()=>{ window.removeEventListener("keydown", onEscPop); ro.disconnect(); };
-    }
-
-    function setZoomAroundCenter(nextScale) {
-      // 프레임 중심을 기준점으로 사용
       const { fx, fy, fw, fh } = frameRect();
-      const cx = fx + fw / 2;
-      const cy = fy + fh / 2;
+      const rect = stage.getBoundingClientRect();
 
-      const s0  = zoom, tx0 = tx, ty0 = ty;
-      // 현재 스크린 좌표(cx, cy)에서의 월드 좌표(이미지 좌표) 계산
-      const wx = (cx - tx0) / s0;
-      const wy = (cy - ty0) / s0;
+      // 스테이지 좌표 → 프레임 내부로 클램프
+      const px = clamp(clientX - rect.left, fx, fx + fw);
+      const py = clamp(clientY - rect.top,  fy, fy + fh);
 
-      const clamped = Math.max(minCover, Math.min(4, Number(nextScale) || 1));
-      zoom = clamped;
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const drawW = iw * zoom, drawH = ih * zoom;
 
-      // 동일 월드 포인트(wx, wy)가 스크린(cx, cy)에 고정되도록 보정
-      tx = cx - wx * zoom;
-      ty = cy - wy * zoom;
+      const cx = fx + fw/2, cy = fy + fh/2;
+      const imgX_before = px - (cx + tx - drawW/2);
+      const imgY_before = py - (cy + ty - drawH/2);
+
+      const k = next / zoom;
+      zoom = next;
+
+      const imgX_after = imgX_before * k;
+      const imgY_after = imgY_before * k;
+
+      tx += (imgX_before - imgX_after);
+      ty += (imgY_before - imgY_after);
+
+      ensureCoverClamp();
+      zoomInput.value = String(zoom);
+      requestAnimationFrame(draw);
     }
 
-    async function exportCroppedCanvas(){
-      const {fx, fy, fw, fh} = frameRect();
-
-      const scaleOut = 1080 / Math.max(fw, fh);
-      const outW = Math.round(fw * scaleOut);
-      const outH = Math.round(fh * scaleOut);
-
+    // Export: 프레임 영역을 새 캔버스로 잘라 Blob 반환
+    async function exportCropped(){
+      const { fx, fy, fw, fh } = frameRect();
       const out = document.createElement("canvas");
-      out.width = outW; out.height = outH;
-      const octx = out.getContext("2d", { alpha: true });
-      octx.imageSmoothingQuality = "high";
+      out.width  = fw;
+      out.height = fh;
+      const octx = out.getContext("2d", { alpha: true, willReadFrequently: false });
 
-      const iw = img.naturalWidth * zoom * scaleOut;
-      const ih = img.naturalHeight * zoom * scaleOut;
-      const dx = (tx - (img.naturalWidth * zoom)/2 + fw/2) * scaleOut;
-      const dy = (ty - (img.naturalHeight* zoom)/2 + fh/2) * scaleOut;
+      // 현재 화면 그리기 수식 재사용
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const drawW = iw * zoom;
+      const drawH = ih * zoom;
+      const dx = Math.round(fx + tx - drawW/2 + fw/2);
+      const dy = Math.round(fy + ty - drawH/2 + fh/2);
 
-      octx.save();
-      octx.beginPath();
-      octx.rect(0, 0, outW, outH);
-      octx.clip();
-      // align to the crop frame
-      octx.drawImage(img, Math.round(dx - fx*scaleOut), Math.round(dy - fy*scaleOut), Math.round(iw), Math.round(ih));
-      octx.restore();
+      // 소스 사각형: 프레임과 이미지 교집합
+      const sx = Math.max(0, fx - dx);
+      const sy = Math.max(0, fy - dy);
+      const sw = Math.min(drawW, fx - dx + fw) - sx;
+      const sh = Math.min(drawH, fy - dy + fh) - sy;
 
-      const blob = await new Promise(res=> out.toBlob(res, "image/png"));
-      return { blob, w: outW, h: outH };
+      if (sw > 0 && sh > 0) {
+        const ddx = Math.max(0, dx - fx);
+        const ddy = Math.max(0, dy - fy);
+        octx.imageSmoothingQuality = "high";
+        octx.drawImage(img, sx/zoom, sy/zoom, sw/zoom, sh/zoom, ddx, ddy, sw, sh);
+      }
+
+      const blob = await new Promise(res => out.toBlob(b => res(b), "image/png"));
+      return { blob, w: out.width, h: out.height };
     }
 
-    function cleanup(){
+    // ───────────────────────────────────────────────────────────
+    // Init
+    // ───────────────────────────────────────────────────────────
+    const ro = new ResizeObserver(() => onStageResize());
+    window.addEventListener("resize", onStageResize);
+    window.addEventListener("orientationchange", onStageResize);
+
+    function cleanup() {
+      try { ro.disconnect(); } catch {}
+      window.removeEventListener("resize", onStageResize);
+      window.removeEventListener("orientationchange", onStageResize);
       try { URL.revokeObjectURL(url); } catch {}
-      try { shell._cleanup?.(); } catch {}
-      back.remove();
+      try { back.remove(); } catch {}
       document.body.classList.remove("is-cropping");
     }
 
-    // close modal on backdrop / ESC
-    const onBackdropClick = (e)=>{ if (e.target === back){ cleanup(); reject(new Error("cancel")); } };
-    const onEsc = (e)=>{ if (e.key === "Escape"){ cleanup(); reject(new Error("cancel")); } };
-    back.addEventListener("click", onBackdropClick);
-    window.addEventListener("keydown", onEsc, { once:true });
+    backBtn.addEventListener("click", () => { cleanup(); reject(new Error("cancel")); });
+    globalClose.addEventListener("click", () => { cleanup(); reject(new Error("cancel")); });
+    back.addEventListener("click", (e) => { if (e.target === back) { cleanup(); reject(new Error("cancel")); } });
+
+    ratioBtn.addEventListener("click", (e)=>{ e.stopPropagation(); openPop("ratio"); });
+    zoomBtn.addEventListener("click",  (e)=>{ e.stopPropagation(); openPop("zoom");  });
+    document.addEventListener("click", closePops, { capture:true });
+
+    ratioMenu.addEventListener("click", (e)=>{
+      const b = e.target.closest("button[data-ar]");
+      if (!b) return;
+      applyAspect(b.getAttribute("data-ar"));
+      closePops();
+    });
+
+    zoomInput.addEventListener("input", ()=>{
+      const next = clamp(+zoomInput.value || 1, minCover, MAX_ZOOM);
+      setZoomAroundCenter(next);
+    });
+
+    // Wheel zoom(커서 기준)
+    stage.addEventListener('wheel', (e) => {
+      if (tools.contains(e.target)) return; // 슬라이더/메뉴 위는 통과
+      e.preventDefault();
+      const scale = Math.exp(-e.deltaY * 0.0016);
+      zoomAtClientPoint(scale, e.clientX, e.clientY);
+    }, { passive:false });
+
+    // 제스처 줌/핀치 비활성(웹뷰 대비)
+    const stopAll = (e)=>{ e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
+    ['gesturestart','gesturechange','gestureend','touchmove'].forEach(t=>{
+      stage.addEventListener(t, stopAll, { passive:false, capture:true });
+    });
+
+    // Pan
+    canvas.addEventListener("pointerdown", (e)=>{
+      isPanning = true;
+      canvas.setPointerCapture(e.pointerId);
+      panStart = { x: e.clientX, y: e.clientY };
+      startTX = tx;
+      startTY = ty;
+    });
+    function onMove(e){
+      if (!isPanning) return;
+      const dx = e.clientX - panStart.x;
+      const dy = e.clientY - panStart.y;
+      tx = startTX + dx;
+      ty = startTY + dy;
+      ensureCoverClamp();
+      requestAnimationFrame(draw);
+    }
+    function onUp(e){
+      if (!isPanning) return;
+      isPanning = false;
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
+      ensureCoverClamp();
+      draw();
+    }
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointercancel", onUp);
+    canvas.addEventListener("lostpointercapture", onUp);
+
+    // Keyboard zoom shortcuts
+    window.addEventListener("keydown", (e)=>{
+      if (document.body.classList.contains("is-cropping") === false) return;
+      const k = e.key.toLowerCase();
+      if ((e.ctrlKey||e.metaKey) && (k==="=" || k==="+")) {
+        e.preventDefault();
+        const rect = stage.getBoundingClientRect();
+        zoomAtClientPoint(1.5, rect.left + viewW/2, rect.top + viewH/2);
+      } else if ((e.ctrlKey||e.metaKey) && k==="-") {
+        e.preventDefault();
+        const rect = stage.getBoundingClientRect();
+        zoomAtClientPoint(1/1.5, rect.left + viewW/2, rect.top + viewH/2);
+      } else if (k === "0" && (e.ctrlKey||e.metaKey)) {
+        e.preventDefault();
+        zoom = Math.max(minCover, 1);
+        centerImage();
+        ensureCoverClamp();
+        zoomInput.value = String(zoom);
+        draw();
+      }
+    });
+
+    nextBtn.addEventListener("click", async () => {
+      nextBtn.disabled = true;
+      nextBtn.textContent = "Processing…";
+      try {
+        const out = await exportCropped();
+        cleanup();
+        resolve(out); // { blob, w, h }
+      } catch (err) {
+        console.error("[Crop] export failed:", err);
+        nextBtn.disabled = false;
+        nextBtn.textContent = "Next";
+      }
+    });
+
+    // 이미지 로딩 완료 → 초기화
+    const init = () => {
+      const rect = stage.getBoundingClientRect();
+      viewW = Math.max(1, Math.floor(rect.width));
+      viewH = Math.max(1, Math.floor(rect.height));
+      canvas.width = viewW;
+      canvas.height = viewH;
+
+      frame = document.createElement("div");
+      frame.className = "crop-frame";
+      stage.appendChild(frame);
+
+      applyAspect(ar);
+      centerImage();
+      ensureCoverClamp();
+      draw();
+
+      ro.observe(stage);
+      onStageResize();
+    };
+
+    if ("decode" in img) {
+      img.decode().then(init).catch(() => { img.onload = init; });
+    } else {
+      img.onload = init;
+    }
   });
 }
 
