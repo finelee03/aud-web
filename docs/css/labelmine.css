@@ -715,3 +715,9 @@ header.nav {
     transition: none !important;
   }
 }
+
+
+/* 줌 컨트롤 */
+.im-zoom { display:flex; align-items:center; gap:.5rem; margin-top:.75rem; }
+.im-zoom-btn { border:1px solid #ddd; background:#fff; width:32px; height:32px; border-radius:8px; font-size:18px; line-height:1; }
+.im-zoom-readout { min-width:3ch; text-align:center; font-variant-numeric: tabular-nums; }
