@@ -2716,9 +2716,12 @@ function openCropModal({ blob, w, h }) {
       ar = next;
       const { fw, fh } = frameRect();
       minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
-      zoom = Math.max(minCover, zoom);
-      if (+zoomInput.value < minCover) zoomInput.value = String(minCover);
-      centerImage();
+      const keep = Math.max(minCover, zoom);
+
+      // 화면(캔버스) 정중앙 앵커를 유지한 채 줌 반영
+      setZoomAroundCenter(keep);
+      zoomInput.value = String(keep);
+
       draw();
     }
 
@@ -2791,7 +2794,17 @@ function openCropModal({ blob, w, h }) {
         viewW = Math.max(1, Math.floor(rect.width));
         viewH = Math.max(1, Math.floor(rect.height));
         canvas.width = viewW; canvas.height = viewH;
-        frameRect(); draw();
+
+        // 프레임 재계산 → minCover 갱신
+        const { fw, fh } = frameRect();
+        minCover = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
+
+        // 현재 줌을 minCover 이상으로 보정하면서, 화면 중심 앵커 유지
+        const keep = Math.max(minCover, zoom);
+        setZoomAroundCenter(keep);
+        zoomInput.value = String(keep);
+
+        draw();
       });
       ro.observe(stage);
 
