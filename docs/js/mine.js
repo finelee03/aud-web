@@ -621,7 +621,7 @@
                : svgOrBtn?.querySelector?.("svg") || svgOrBtn;
     const path = svg?.querySelector?.("path"); if (!path) return;
     path.setAttribute("d", HEART_D);
-    path.setAttribute("fill", "none");
+    path.setAttribute("fill", "currentColor");
     path.setAttribute("stroke", "currentColor");
     path.setAttribute("stroke-width", "1.5");
     path.style.setProperty("fill","none","important");
