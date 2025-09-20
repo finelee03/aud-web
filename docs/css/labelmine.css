@@ -638,3 +638,24 @@ header.nav{ position:sticky; top:0; z-index:100; height:var(--nav-h); background
   transform-origin: 50% 50%; /* 줌의 중심을 정중앙으로 설정 */
   transition: transform 0.1s ease-out; /* 줌 효과를 부드럽게 */
 }
+
+/* =====================================================================
+   줌 동작 중앙 정렬 (수정)
+===================================================================== */
+
+/* 1. 이미지를 담는 컨테이너를 Flexbox로 만들어서 내부 아이템(이미지)을 중앙 정렬합니다. */
+.im-stage {
+  display: flex;
+  justify-content: center; /* 가로 중앙 정렬 */
+  align-items: center;    /* 세로 중앙 정렬 */
+  overflow: hidden;         /* 줌 했을 때 이미지가 컨테이너 밖으로 삐져나가지 않도록 함 */
+}
+
+/* 2. 이미지 자체의 스타일 (기존 + object-fit 추가) */
+.im-stage > img {
+  transform-origin: 50% 50%; /* 줌 기준점 (이건 올바르게 되어 있었습니다) */
+  transition: transform 0.1s ease-out;
+  object-fit: contain; /* 이미지가 컨테이너 안에서 비율을 유지하며 꽉 차게 보이도록 함 */
+  max-width: 100%;     /* 이미지가 컨테이너보다 커지는 것을 방지 */
+  max-height: 100%;    /* 이미지가 컨테이너보다 커지는 것을 방지 */
+}
