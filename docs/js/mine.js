@@ -53,6 +53,56 @@
     catch { return String(uid || "default"); }
   };
   try { window.getNS = getNS; } catch {}
+
+  // === Like Store Bridge (fallback) ====================================
+  // 위치: mine.js 상단 쪽, getNS() 다음/HEART UI 이전에 넣기
+  (function(){
+    const has = (fn)=> typeof window[fn] === 'function';
+    const getNS = (window.getNS ? window.getNS : ()=>'default');
+
+    // 내부 유틸
+    const KEY = () => `likes:map:${getNS()}`;
+    const readMap = () => {
+      try { return JSON.parse(localStorage.getItem(KEY()) || "{}"); }
+      catch { return {}; }
+    };
+    const writeMap = (map) => {
+      try { localStorage.setItem(KEY(), JSON.stringify(map)); } catch {}
+      // 다른 탭 동기화용 커스텀 이벤트(옵션)
+      try { window.dispatchEvent(new Event("likes:map:changed")); } catch {}
+    };
+
+    // 공개 API (없을 때만 주입)
+    if (!has('readLikesMap')) {
+      window.readLikesMap = () => readMap();
+    }
+    if (!has('getLikeIntent')) {
+      window.getLikeIntent = (id) => {
+        const m = readMap(); const r = m[String(id)] || {};
+        return { liked: (typeof r.i === 'boolean' ? r.i : null), likes: (typeof r.c === 'number' ? r.c : null) };
+      };
+    }
+    if (!has('setLikeIntent')) {
+      window.setLikeIntent = (id, liked, likes) => {
+        const m = readMap(); const k = String(id);
+        const rec = m[k] || {};
+        if (typeof liked === 'boolean') rec.i = liked;
+        if (typeof likes === 'number')  rec.c = Math.max(0, likes);
+        rec.t = Date.now();
+        m[k] = rec; writeMap(m);
+      };
+    }
+    if (!has('setLikeCountOnly')) {
+      window.setLikeCountOnly = (id, likes) => {
+        const m = readMap(); const k = String(id);
+        const rec = m[k] || {};
+        if (typeof likes === 'number') rec.c = Math.max(0, likes);
+        rec.t = Date.now();
+        m[k] = rec; writeMap(m);
+      };
+    }
+  })();
+
   // === Realtime keys
   const FEED_EVENT_KIND = "feed:event"; // BroadcastChannel에서 사용
   let __ME_ID = null;                   // 로그인한 내 user id 캐시
