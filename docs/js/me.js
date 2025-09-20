@@ -368,6 +368,7 @@
       const res = await fn(path, opt);
       if (res && res.status === 401) {
         try { sessionStorage.removeItem("auth:flag"); } catch {}
+        try { localStorage.removeItem("auth:flag"); } catch {}
         return null;
       }
       return res;
@@ -466,6 +467,7 @@
 
   let socket      = null;
   let MY_ITEM_IDS = new Set();
+  let __PREV_ITEM_IDS = new Set();
 
   const isNotifyOn    = () => { try { return localStorage.getItem(NOTIFY_KEY) === "1"; } catch { return false; } };
   const setNotifyOn   = (on) => {
@@ -490,7 +492,7 @@
 
     const icon = (() => {
       try {
-        const cached = parseJSON(sessionStorage.getItem("me:profile"), null) || parseJSON(localStorage.getItem("me:profile"), null);
+        const cached = readProfileCache();
         if (cached?.avatarUrl) return cached.avatarUrl;
       } catch {}
       const link = document.querySelector('link[rel="icon"],link[rel="shortcut icon"]');
@@ -645,10 +647,16 @@
   }
 
   function updateMyItemRooms(ids) {
+    __PREV_ITEM_IDS = MY_ITEM_IDS;
     MY_ITEM_IDS = new Set((ids || []).map(String));
     if (socket && socket.connected) {
-      socket.emit("unsubscribe", { items: [] });
-      if (MY_ITEM_IDS.size) socket.emit("subscribe", { items: [...MY_ITEM_IDS] });
+      // 서버가 교체를 지원하면:
+      socket.emit("subscribe", { items: [...MY_ITEM_IDS], replace: true });
+      // 교체 미지원이면 아래 주석 해제해서 diff 적용
+      // const toUnsub = [...__PREV_ITEM_IDS].filter(id => !MY_ITEM_IDS.has(id));
+      // const toSub   = [...MY_ITEM_IDS].filter(id => !__PREV_ITEM_IDS.has(id));
+      // if (toUnsub.length) socket.emit("unsubscribe", { items: toUnsub });
+      // if (toSub.length)   socket.emit("subscribe",   { items: toSub   });
     }
   }
 
@@ -683,7 +691,8 @@
     if (!obj || typeof obj !== "object") return { counts: emptyCounts(), my: null, total: 0 };
     const c = normalizeCounts(obj.votes || obj.counts || obj.totals || obj.items || obj.data || obj);
     const my = obj.my ?? obj.mine ?? obj.choice ?? obj.selected ?? null;
-    const total = Number(obj.total ?? Object.values(c).reduce((s, n) => s + Number(n || 0), 0));
+    const sum = Object.values(c).reduce((s, n) => s + Number(n || 0), 0);
+    const total = Number.isFinite(Number(obj.total)) ? Number(obj.total) : sum;
     return { counts: c, my: (OPTIONS.includes(my) ? my : null), total };
   }
 
@@ -740,7 +749,7 @@
         const nsMatch   = String(it?.ns || "").toLowerCase() === myns;
         const mineFlag  = (it?.mine === true);
         const ownerMatch= String(it?.user?.id || "").toLowerCase() === myns; // (옵션)
-        if (nsMatch || mineFlag) out.push(it);
+        if (nsMatch || mineFlag || ownerMatch) out.push(it);
       });
 
       cursor = j?.nextCursor || null;
@@ -915,7 +924,7 @@
     wrap.innerHTML = `
       <button type="button" class="overlay" aria-label="닫기"></button>
       <div class="sheet" role="document" aria-labelledby="edit-title">
-        <h2 id="edit-title" class="title">Profile edit</h2>
+        <h2 id="edit-title" class="title">Edit profile</h2>
 
         <div class="toolbar">
           <button type="button" class="btn" id="btn-change-avatar">Change profile</button>
@@ -973,7 +982,7 @@
       const nw  = nwEl?.value || "";
       const nw2 = nw2El?.value || "";
 
-      if (!displayName) { msgEl.textContent = "Please enter a your name."; dnEl?.focus(); return; }
+      if (!displayName) { msgEl.textContent = "Please enter your name."; dnEl?.focus(); return; }
       if (nw || nw2 || cur) {
         if (!cur)          { msgEl.textContent = "Please enter your current password."; curEl?.focus(); return; }
         if (nw.length < 8) { msgEl.textContent = "Your new password must be at least 8 characters long."; nwEl?.focus(); return; }
@@ -1478,7 +1487,9 @@
     } else {
       const next = encodeURIComponent(location.href);
       // try { window.auth?.markNavigate?.(); } catch {}
-      location.replace(`${pageHref('login.html')}?next=${next}`);
+      const loginURL = new URL("./login.html", document.baseURI);
+      loginURL.searchParams.set("next", next);
+      location.replace(loginURL.href);
       return;
     }
   }
@@ -1488,6 +1499,86 @@
   } else {
     boot();
   }
+
+  // === 강제 로컬 정리: store.js 및 저장소 전체 정리 ===
+  function __purgeLocalStateHard(reason = "account-delete") {
+    // 1) store.js 계정/수집 데이터 정리 (가능한 모든 안전 API 호출)
+    try { window.store?.purgeAccount?.(); } catch {}
+    try { window.store?.reset?.(); } catch {}
+    try { window.store?.clearAll?.(); } catch {}
+    try { window.jib?.reset?.(); } catch {}
+    try { window.__flushStoreSnapshot?.({ server:false }); } catch {}
+
+    // 2) sessionStorage / localStorage 키 정리
+    const wipeKey = (k) => {
+      try { sessionStorage.removeItem(k); } catch {}
+      try { localStorage.removeItem(k); } catch {}
+    };
+
+    // 자주 쓰는 키들
+    [
+      "auth:flag","auth:userns",
+      "collectedLabels","jib:collected",
+      "me:notify-enabled","me:notify-native",
+    ].forEach(wipeKey);
+
+    // 프로필/인사이트 캐시(네임스페이스 기반)
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.startsWith("me:profile") || key.startsWith("insights:")
+          || key.startsWith("mine:") || key.startsWith("aud:label:")
+          || key.startsWith("notify:self:") || key.startsWith("notify:remote:")) {
+          wipeKey(key);
+        }
+      }
+    } catch {}
+
+
+    // 3) 다른 탭에도 알려주기 (storage 이벤트 트리거)
+    try { localStorage.setItem(`purge:reason:${Date.now()}`, reason); } catch {}
+
+    // 4) 앱 전역 이벤트 브로드캐스트 (의존 모듈들이 스스로 정리하도록)
+    try { window.dispatchEvent(new Event("store:purged")); } catch {}
+    try { window.dispatchEvent(new Event("auth:logout")); } catch {}
+  }
+
+  // === 탈퇴 전용: 경고 + 하드 정리 + 백엔드 삭제 ===
+  async function __confirmAndDeleteAccount() {
+    // 1) 강한 경고(두 줄 메시지)
+    const ok = window.confirm(
+      "정말로 계정을 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며 저장된 데이터가 모두 삭제됩니다."
+    );
+    if (!ok) return { ok: false, msg: "cancelled" };
+
+    // 2) 즉시 로컬 정리 (네트워크 실패 대비)
+    __purgeLocalStateHard("account-delete");
+
+    // 3) 서버에 실제 탈퇴 요청 시도 (성공/실패와 무관하게 로컬은 이미 정리됨)
+    try { await ensureCSRF(); } catch {}
+    const attempts = [
+      { url: "/auth/me",          method: "DELETE" },
+      { url: "/api/users/me",     method: "DELETE" },
+      { url: "/auth/delete",      method: "POST"   },
+      { url: "/api/users/me",     method: "POST",  body: { _method: "DELETE" } },
+    ];
+
+    for (const a of attempts) {
+      try {
+        const opt = await withCSRF({
+          method: a.method,
+          credentials: "include",
+          headers: { "Accept": "application/json", ...(a.body ? { "Content-Type": "application/json" } : {}) },
+          body: a.body ? JSON.stringify(a.body) : undefined,
+        });
+        const r = await api(a.url, opt);
+        if (r && (r.status === 200 || r.status === 204)) return { ok: true };
+      } catch {}
+    }
+    return { ok: false, msg: "server-failed" };
+  }
+
 
   // === Logout button support (ported from mine.js) ===
   async function __safeBeaconLogout() {
@@ -1507,22 +1598,19 @@
     if (!btn || btn.__bound) return;
     btn.__bound = true;
 
-    try { btn.style.pointerEvents = "auto"; btn.style.zIndex = "1000"; btn.tabIndex = 0; } catch {}
-
     btn.addEventListener("click", async (e) => {
       e.preventDefault(); e.stopPropagation();
       try { btn.disabled = true; btn.setAttribute("aria-busy", "true"); } catch {}
-
-      if (typeof window.auth?.logout === "function") {
-        try { await window.auth.logout(e); return; } catch {}
+      try {
+        // ✅ 순수 로그아웃만 수행
+        await __safeBeaconLogout();
+        try { window.auth?.markNavigate?.(); } catch {}
+        const loginURL = new URL("./login.html", document.baseURI);
+        loginURL.searchParams.set("next", new URL("./me.html", document.baseURI).href);
+        location.assign(loginURL.href);
+      } finally {
+        try { btn.disabled = false; btn.removeAttribute("aria-busy"); } catch {}
       }
-
-      await __safeBeaconLogout();
-      try { window.auth?.markNavigate?.(); } catch {}
-
-      const loginURL = new URL("./login.html", document.baseURI);
-      loginURL.searchParams.set("next", new URL("./me.html", document.baseURI).href);
-      location.assign(loginURL.href);
     }, { capture: false });
 
     btn.addEventListener("keydown", (ev) => {
@@ -1538,10 +1626,60 @@
     } catch {}
   }
 
+  // === Delete(탈퇴) 버튼 바인딩: #btn-delete ===
+  function bindDeleteButtonForMe() {
+    const btn = $("#btn-delete");
+    if (!btn || btn.__bound) return;
+    btn.__bound = true;
+
+    // inline 스타일 금지 정책을 지키기 위해 style 조작은 하지 않습니다.
+
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const res = await __confirmAndDeleteAccount();
+
+      // ⬇️ 확인 취소 시 즉시 중단 (아무 변화 없음)
+      if (!res?.ok && res?.msg === "cancelled") return;
+
+      // ⬇️ 서버 실패 시: 알림만 띄우고 현재 페이지 유지 (로컬은 이미 정리됨)
+      if (!res?.ok) {
+        alert("서버에서 계정 삭제 처리에 실패했습니다. 로컬 데이터는 정리되었으며, 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+
+      // 성공 시 세션 마무리 후 로그인으로
+      await __safeBeaconLogout();
+      try { window.auth?.markNavigate?.(); } catch {}
+      const loginURL = new URL("./login.html", document.baseURI);
+      loginURL.searchParams.set("next", new URL("./me.html", document.baseURI).href);
+      location.assign(loginURL.href);
+    }, { capture: false });
+
+    // 접근성: 키보드 엔터/스페이스로 활성화
+    btn.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); btn.click(); }
+    });
+
+    // 동적 리렌더 대비 재바인딩 가드
+    try {
+      const mo = new MutationObserver(() => {
+        const b = $("#btn-delete");
+        if (b && !b.__bound) bindDeleteButtonForMe();
+      });
+      mo.observe(document.body, { childList: true, subtree: true });
+    } catch {}
+  }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bindLogoutButtonForMe, { once: true });
+    document.addEventListener("DOMContentLoaded", () => {
+      bindLogoutButtonForMe();
+      bindDeleteButtonForMe();
+    }, { once: true });
   } else {
     bindLogoutButtonForMe();
+    bindDeleteButtonForMe();
   }
 
 })();

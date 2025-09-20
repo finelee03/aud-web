@@ -98,14 +98,26 @@
 
   <!-- 하단 푸터: mine과 동일 -->
 <footer class="mine-footer">
-    <div class="footer-inner">
-      <button id="btn-logout" class="btn-logout" type="button">
-        <span class="icon-logout ico" aria-hidden="true"></span>
-        <span class="label">Log out</span>
-      </button>
-    </div>
-  </footer>
+  <div class="footer-inner">
+    <!-- 기존 로그아웃 버튼(현 상태 유지) -->
+    <button id="btn-logout" class="btn-logout" type="button">
+      <span class="icon-logout ico" aria-hidden="true"></span>
+      <span class="label">Log out</span>
+    </button>
 
+    <!-- 신규 탈퇴 버튼: 동일 스타일(.btn-logout) + 외부 SVG + 180° 회전 -->
+    <button id="btn-delete" class="btn-logout btn-delete" type="button" aria-label="계정 탈퇴">
+      <img
+        class="ico ico-delete rotate-180"
+        src="./asset/sign-out-svgrepo-com.svg"
+        alt=""
+        width="20"
+        height="20"
+      />
+      <span class="sr-only">탈퇴</span>
+    </button>
+  </div>
+</footer>
 
 
   <script src="https://aud-api-dtd1.onrender.com/socket.io/socket.io.js"></script>

@@ -189,6 +189,7 @@ header.nav{
 }
 .btn.primary:hover, .btn-primary:hover{ filter: brightness(.98); transform: translateY(-1px); }
 .btn.ghost{ background: #fff; color: #111; }
+.btn-logout { pointer-events:auto; z-index:1000; } 
 
 /* =====================================================================
    7) Insights (상단 KPI)
@@ -549,7 +550,15 @@ progress#m-rate-bar::-webkit-progress-value{
   margin: 0 auto; display: flex; justify-content: center;
 }
 
-.mine-footer{ padding-bottom: 48px; }
+/* 버튼 간 간격(옵셔널: 이미 규칙 있으면 생략) */
+.mine-footer .footer-inner .btn-logout + .btn-logout { margin-left: 8px; }
+
+/* 탈퇴 버튼 전용(룩은 .btn-logout 상속) */
+.btn-delete .ico-delete { inline-size: 20px; block-size: 20px; }
+
+/* 180° 회전 전용 유틸 */
+.rotate-180 { transform: rotate(180deg); display: inline-block; }
+
 
 .btn-logout{
   appearance: none;
